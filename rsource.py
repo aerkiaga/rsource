@@ -6,9 +6,9 @@ GRCh_revision = "38"
 chromosomes = ('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', 'X', 'Y', 'mt')
 
 conf = {
-    'delete sequence' : False,
-    'delete annotations' : False,
-    'delete gaps' : True
+    'delete sequence' : True,
+    'delete annotations' : True,
+    'delete gaps' : False
 }
 
 script_path = os.path.realpath(__file__)
@@ -122,8 +122,8 @@ def parse_config():
     config = configparser.ConfigParser()
     config_path = os.path.join(path, "config.ini")
     config.read(config_path)
-    if 'Files' in config:
-        section = config['Files']
+    if 'Setup' in config:
+        section = config['Setup']
         get_config(section, 'delete sequence')
         get_config(section, 'delete annotations')
         get_config(section, 'delete gaps')

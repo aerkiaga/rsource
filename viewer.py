@@ -409,8 +409,8 @@ def parse_config():
     config = configparser.ConfigParser()
     config_path = os.path.join(path, "config.ini")
     config.read(config_path)
-    if 'Nucleotide Colors' in config:
-        section = config['Nucleotide Colors']
+    if 'Nucleobase Colors' in config:
+        section = config['Nucleobase Colors']
         get_config_color(nucleotide_colors, 0, section, 'A')
         get_config_color(nucleotide_colors, 1, section, 'C')
         get_config_color(nucleotide_colors, 2, section, 'G')
