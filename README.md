@@ -9,12 +9,12 @@ insight into the genome, or just an overly complex console toy.
 ## Installing
 The Python scripts can be run in place. They have the following dependencies:
  * Python 3 (3.5 or above is recommended)
- * PyPy3 (optional, but speeds up setup)
+ * PyPy3 (optional, but speeds up setup if detected)
  * wget
  * rm (optional)
 
 Most Linux systems already have these installed (save for PyPy3).
-See "Configuration" for setup customization. In order to set up the tool, one must run:
+See [Configuration](#configuration) for setup customization. In order to set up the tool, one must run:
 
     python3 ./rsource.py
 
@@ -55,10 +55,12 @@ location in the chromosome, one can use:
 
     python3 ./rsource.py 18.10000
     python3 ./rsource.py 18.50%
+    python3 ./rsource.py 18.-700000
+    python3 ./rsource.py 18.-1%
 
 This advances a number of base-pairs into the chromosome (starts at 1), or a
 percentage of its length, allowing to easily see particularly interesting
-landmarks anywhere.
+landmarks anywhere. A negative value will count from the end of the chromosome.
 
 ## Configuration
 All configuration is done via a single `config.ini` file. This contains a few

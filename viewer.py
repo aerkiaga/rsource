@@ -314,7 +314,7 @@ def main(stdscr):
     if pos_percent:
         pos = (pos * size) // 100
     if pos <= 0:
-        pos = size - pos
+        pos = size + pos
     file.seek(4 + pos//4 - 1)
 
     mt_path = os.path.join(path, current_ch + ".dat")
