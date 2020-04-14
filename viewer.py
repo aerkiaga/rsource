@@ -21,6 +21,7 @@ feature_mask = 63
 end_encode = 128
 
 PAIR_UNK = 0
+PAIR_HIGHLIGHT = 1
 PAIR_NONE = 8
 PAIR_EXON_PSEUDO = 12
 PAIR_UTR_GENE = 16
@@ -41,6 +42,10 @@ region_colors = {
     PAIR_CDS : 63
 }
 
+other_colors = {
+    PAIR_HIGHLIGHT : 11
+}
+
 script_path = os.path.realpath(__file__)
 path = os.path.dirname(script_path)
 
@@ -48,6 +53,10 @@ scrx = 0
 scry = 0
 scrw = 80
 scrh = 25
+
+highlight = {
+    'cpg' : False
+}
 
 current_features = {}
 current_info = ""
@@ -57,6 +66,7 @@ size = None
 next_pos = None
 next_feat = None
 prev_info_pos = None
+prev_nucleotide = None
 pos_percent = False
 
 def get_input(stdscr):
@@ -96,8 +106,21 @@ def print_char(char, pair, stdscr):
         next_char(stdscr)
         print_char(char, pair, stdscr)
 
+def set_prev_pairs(number, pair, stdscr):
+    global scrx, scry, scrw, scrh
+    x = scrx
+    y = scry
+    for n in range(0, number):
+        x -= 1
+        if x < 0:
+            x = scrw-2
+            y -= 1
+            if y < 0:
+                break
+        stdscr.chgat(y, x, curses.color_pair(pair))
+
 def print_nucleotide(nucleotide, stdscr):
-    global current_feature
+    global current_feature, prev_nucleotide, highlight
     pair = None
     if feature_encode['gap'] in current_features:
         nucleotide = 4
@@ -113,6 +136,10 @@ def print_nucleotide(nucleotide, stdscr):
             pair = PAIR_UNK
     else:
         pair = PAIR_NONE + nucleotide
+    if highlight['cpg'] and prev_nucleotide == 1 and nucleotide == 2:
+        pair = PAIR_HIGHLIGHT
+        set_prev_pairs(1, PAIR_HIGHLIGHT, stdscr)
+    prev_nucleotide = nucleotide
     print_char(nucleotide_decoding[nucleotide], pair, stdscr)
 
   #####      ##    #######   #######  ##        ########  #######  ########  #######   #######  ##     ## ##    ##
@@ -298,23 +325,6 @@ def update_features(mt_file):
     next_pos = int.from_bytes(mt_file.read(4), byteorder='little', signed=False)
     next_feat = int.from_bytes(mt_file.read(1), byteorder='little', signed=False)
 
-def get_start_pos():
-    global current_ch, pos, pos_percent
-    match = None
-    for arg in sys.argv[1:]:
-        match = re.fullmatch(r'([1-9XY]|1\d|2[0-2]|mt)\s*(\.(-?\d+%?))?', arg)
-        if match:
-            break
-    if match:
-        current_ch = match.group(1)
-        pos_str = match.group(3)
-        if pos_str:
-            if pos_str[-1] == '%':
-                pos_percent = True
-                pos = int(pos_str[:-1])
-            else:
-                pos = int(pos_str)
-
 def main(stdscr):
     global next_pos, next_feat, current_features, current_info , pos, size, pos_percent, scrw, scrh
     curses.start_color()
@@ -326,6 +336,7 @@ def main(stdscr):
     for pair, background in region_colors.items():
         for offset, foreground in nucleotide_colors.items():
             curses.init_pair(pair + offset, foreground, background)
+    curses.init_pair(PAIR_HIGHLIGHT, 0, other_colors[PAIR_HIGHLIGHT])
 
     ch_path = os.path.join(path, current_ch + ".bin")
     file = open(ch_path, 'rb')
@@ -446,8 +457,41 @@ def parse_config():
         get_config_color(region_colors, PAIR_EXON_PSEUDO, section, 'pseudogene exon')
         get_config_color(region_colors, PAIR_UTR_GENE, section, 'gene UTR')
         get_config_color(region_colors, PAIR_CDS, section, 'CDS')
+    if 'Other Colors' in config:
+        get_config_color(other_colors, PAIR_HIGHLIGHT, section, 'highlight')
+
+def get_start_pos():
+    global current_ch, pos, pos_percent
+    match = None
+    for arg in sys.argv[1:]:
+        match = re.fullmatch(r'([1-9XY]|1\d|2[0-2]|mt)\s*(\.(-?\d+%?))?', arg)
+        if match:
+            break
+    if match:
+        current_ch = match.group(1)
+        pos_str = match.group(3)
+        if pos_str:
+            if pos_str[-1] == '%':
+                pos_percent = True
+                pos = int(pos_str[:-1])
+            else:
+                pos = int(pos_str)
+
+def parse_options():
+    global highlight
+    get_start_pos()
+    for arg in sys.argv[1:]:
+        match = re.fullmatch(r'hl=([a-zA-Z0-9,]*)', arg)
+        if match:
+            break
+    if match:
+        hls = match.group(1).split(',')
+        for hl in hls:
+            hl = hl.lower()
+            if hl in highlight:
+                highlight[hl] = True
 
 parse_config()
-get_start_pos()
+parse_options()
 scrw, scrh = shutil.get_terminal_size((scrw, scrh))
 curses.wrapper(main)
