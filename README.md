@@ -11,6 +11,7 @@ The Python scripts can be run in place. They have the following dependencies:
  * Python 3 (3.5 or above is recommended)
  * PyPy3 (optional, but speeds up setup if detected)
  * wget
+ * gunzip
  * rm (optional)
 
 Most Linux systems already have these installed (save for PyPy3).
