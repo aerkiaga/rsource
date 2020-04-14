@@ -480,6 +480,7 @@ def get_start_pos():
 def parse_options():
     global highlight
     get_start_pos()
+    match = None
     for arg in sys.argv[1:]:
         match = re.fullmatch(r'hl=([a-zA-Z0-9,]*)', arg)
         if match:
