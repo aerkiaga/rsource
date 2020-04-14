@@ -68,21 +68,24 @@ next_feat = None
 prev_info_pos = None
 prev_nucleotide = None
 pos_percent = False
+paused = False
 
 def get_input(stdscr):
-    global scrw, scrh
+    global scrw, scrh, paused
     time.sleep(0.1)
     key = stdscr.getch()
     if key == curses.KEY_RESIZE:
         scrh, scrw = stdscr.getmaxyx()
         scrx, scry = 0, 0
+    elif key == ord('\n') or key == curses.KEY_ENTER or key == ord(' '):
+        paused = not paused
 
 def print_status(stdscr):
     global pos, size, current_info
     stdscr.addstr(0, 0, "{} ({:.3f}%) {}".format(pos, pos*100/size, current_info))
 
 def next_line(stdscr):
-    global scrx, scry, scrw, scrh
+    global scrx, scry, scrw, scrh, paused
     scrx = 0
     scry += 1
     if scry >= scrh:
@@ -90,6 +93,8 @@ def next_line(stdscr):
         scry = scrh - 1
         print_status(stdscr)
         get_input(stdscr)
+        while(paused):
+            get_input(stdscr)
 
 def next_char(stdscr):
     global scrx, scry, scrw, scrh, pos, size
@@ -326,7 +331,7 @@ def update_features(mt_file):
     next_feat = int.from_bytes(mt_file.read(1), byteorder='little', signed=False)
 
 def main(stdscr):
-    global next_pos, next_feat, current_features, current_info , pos, size, pos_percent, scrw, scrh
+    global next_pos, next_feat, current_features, current_info , pos, size, pos_percent, scrw, scrh, paused
     curses.start_color()
     curses.use_default_colors()
     stdscr.idlok(True)
@@ -366,8 +371,6 @@ def main(stdscr):
                     next_line(stdscr)
                 print_title(current_ch, stdscr)
             if pos == size:
-                #get_input(stdscr)
-                #sleep(10.0)
                 break
             if pos == next_pos:
                 while pos == next_pos:
@@ -461,7 +464,7 @@ def parse_config():
         get_config_color(other_colors, PAIR_HIGHLIGHT, section, 'highlight')
 
 def get_start_pos():
-    global current_ch, pos, pos_percent
+    global current_ch, pos, pos_percent, paused
     match = None
     for arg in sys.argv[1:]:
         match = re.fullmatch(r'([1-9XY]|1\d|2[0-2]|mt)\s*(\.(-?\d+%?))?', arg)
@@ -476,6 +479,7 @@ def get_start_pos():
                 pos = int(pos_str[:-1])
             else:
                 pos = int(pos_str)
+            paused = True
 
 def parse_options():
     global highlight
