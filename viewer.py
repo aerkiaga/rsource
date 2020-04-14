@@ -26,6 +26,7 @@ PAIR_NONE = 8
 PAIR_EXON_PSEUDO = 12
 PAIR_UTR_GENE = 16
 PAIR_CDS = 20
+PAIR_INTRON = 24
 
 nucleotide_colors = {
     0 : 9,
@@ -39,7 +40,8 @@ region_colors = {
     PAIR_NONE : -1,
     PAIR_EXON_PSEUDO : 102,
     PAIR_UTR_GENE : 170,
-    PAIR_CDS : 63
+    PAIR_CDS : 63,
+    PAIR_INTRON : 232
 }
 
 other_colors = {
@@ -139,6 +141,8 @@ def print_nucleotide(nucleotide, stdscr):
             pair = PAIR_EXON_PSEUDO + nucleotide
         else:
             pair = PAIR_UNK
+    elif feature_encode['gene'] in current_features or feature_encode['pseudogene'] in current_features:
+        pair = PAIR_INTRON + nucleotide
     else:
         pair = PAIR_NONE + nucleotide
     if highlight['cpg'] and prev_nucleotide == 1 and nucleotide == 2:
@@ -462,6 +466,7 @@ def parse_config():
         get_config_color(region_colors, PAIR_EXON_PSEUDO, section, 'pseudogene exon')
         get_config_color(region_colors, PAIR_UTR_GENE, section, 'gene UTR')
         get_config_color(region_colors, PAIR_CDS, section, 'CDS')
+        get_config_color(region_colors, PAIR_INTRON, section, 'intron')
     if 'Other Colors' in config:
         get_config_color(other_colors, PAIR_HIGHLIGHT, section, 'highlight')
 
