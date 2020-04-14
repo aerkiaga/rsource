@@ -315,14 +315,14 @@ def main(stdscr):
         pos = (pos * size) // 100
     if pos <= 0:
         pos = size + pos
-    file.seek(4 + pos//4 - 1)
+    file.seek(4 + (pos-1)//4)
 
     mt_path = os.path.join(path, current_ch + ".dat")
     mt_file = open(mt_path, 'rb')
     next_pos = int.from_bytes(mt_file.read(4), byteorder='little', signed=False)
     next_feat = int.from_bytes(mt_file.read(1), byteorder='little', signed=False)
 
-    while(pos > next_pos):
+    while(pos > next_pos and next_pos > 0):
         update_features(mt_file)
 
     byte = file.read(1)
@@ -334,6 +334,8 @@ def main(stdscr):
                     next_line(stdscr)
                 print_title(current_ch, stdscr)
             if pos == size:
+                #get_input(stdscr)
+                #sleep(10.0)
                 break
             if pos == next_pos:
                 while pos == next_pos:
