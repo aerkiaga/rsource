@@ -60,7 +60,8 @@ location in the chromosome, one can use:
 
 This advances a number of base-pairs into the chromosome (starts at 1), or a
 percentage of its length, allowing to easily see particularly interesting
-landmarks anywhere. A negative value will count from the end of the chromosome.
+landmarks anywhere (see [Travel Guide](#travel-guide)). A negative value will
+count from the end of the chromosome instead.
 
 ## Configuration
 All configuration is done via a single `config.ini` file. This contains a few
@@ -78,3 +79,85 @@ Colors can be in HTML HEX or RGB format.
 
 The "**Region Colors**" section sets background colors for highlighting different
 regions. Colors can be in HTML HEX or RGB format.
+
+## Travel Guide
+Since our genome is so large, it's important to know where to search for interesting
+items. Here is a list of regions to have a look at, laid out as a tutorial.
+
+ * [Telomeres](#telomeres)
+ * [Centromeres](#centromeres)
+
+### Telomeres
+Run:
+
+    python3 ./rsource.py 5.5000
+
+Soon after the start, there is a long string of repeated bases. The repeated
+sequence is `CCCTAA`. This sequence probably also extends into the "unknown" area.
+Now run:
+
+    python3 ./rsource.py 1.-15000
+
+There are also repeated sequences before the large gap at the end. This time the
+repeated fragment is `TTAGGG`.
+
+There is a reason for this. Our DNA has two strands, and each of them has two ends,
+termed 5' and 3'. The sense we are reading it is 5' to 3' (also called (+) sense).
+The two strands are joined in opposite senses, with their bases paired A to T and C to G.
+When DNA is copied, a new complementary strand is made from each of the two, resulting
+in two double-stranded DNA helices. The machinery used for this is about the same
+in all organisms, including bacteria (which have circular chromosomes with no ends)
+and us. However, due to a quirk in it, a few bases in the two 3' ends of our
+linear chromosomes are not copied, so the 5' end of the new complementary strand
+is shorter.
+
+This poses two problems. Firstly, after many copying operations, important regions
+could be lost. Secondly, since only one strand is shortened at each end, non-paired
+DNA results; this could pair randomly with similar sequences in other chromosomes
+and cause trouble.
+
+The way these problems are solved is by having a special protein (telomerase)
+add these fixed sequences at the ends of all chromosomes. This "useless" DNA can
+be lost without problem. Additionally, other proteins recognize these particular
+repeated sequences, bind them, and "tie" them in a "hairpin" shape that leaves
+no unpaired DNA exposed.
+
+In all vertebrates, including humans, the repeated sequence is `TTAGGG`. That is,
+reading from the center towards the ends, along the (+) strand in each end.
+This is the sequence we find at the end of chromosome 1, since we are reading in
+that sense. At the beginning of chromosome 5, however, we are reading *towards*
+the center, so the sequence is reversed. Additionally, since our (+) strand is
+the (-) strand counting from the center, we also get the complementary sequence.
+The result is `CCCTAA`.
+
+### Centromeres
+Resize your console the nearest you can to 170 width. If you can't, resize it
+as close as possible to 85 width (actually, any multiple or divisor of 170 will do,
+if it is close enough and reasonably large). Make it as large as possible in height.
+Now run:
+
+    python3 ./rsource.py 1.50%
+
+The resulting pattern is truly beautiful, and, more importantly, it's real DNA
+inside our cells! The region of chromosome 1 where we have landed is called the
+centromere. It just happens to be at the center of the chromosome, which is not
+necessarily true for all chromosomes.
+
+When a cell wants to divide, it packs all its DNA (except mtDNA) tightly, making
+each chromosome into a rod-shaped bundle (these are the funky bars that appeared
+during setup, with bright and dark bands that are seen when staining and observing
+through a microscope). Since the cell has usually copied all chromosomes before
+doing this, the two copies of each packed chromosome (called chromatids) are joined
+together at the centromere, forming the characteristic 'X'-shaped chromosome.
+Then, the cell pulls each chromatid from its centromere, separating them and
+moving each to one pole. This way, chromosomes are sorted, one copy of each for
+each of the two daughter cells.
+
+What we see at this location is several thousand copies of a ~170 bp sequence
+called an α-satellite. This is recognized by cell machinery to identify where
+the centromere is. Note that copies of the α-satellite are slightly different,
+both in length and content. Further along the centromere, lines on the console
+start to become wobblier: a few α-satellites of different lengths are grouped, and
+these groups themselves are also periodically repeated! Everything here has appeared
+through mutation and copying, all throughout evolution, introducing randomness and
+sheer complexity even in something as simple as a repeated sequence.
