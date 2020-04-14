@@ -53,10 +53,11 @@ current_features = {}
 current_info = ""
 current_ch = "1"
 pos = 1
-pos_percent = False
 size = None
 next_pos = None
 next_feat = None
+prev_info_pos = None
+pos_percent = False
 
 def get_input(stdscr):
     global scrw, scrh
@@ -279,7 +280,7 @@ def get_feature_info(feat, mt_file):
     return ""
 
 def update_features(mt_file):
-    global next_pos, next_feat, current_features, current_info
+    global next_pos, next_feat, current_features, current_info, prev_info_pos
     if next_feat & end_encode:
         if (next_feat & feature_mask) not in current_features:
             pass
@@ -293,6 +294,7 @@ def update_features(mt_file):
     info = get_feature_info(next_feat, mt_file)
     if info:
         current_info = info
+        prev_info_pos = next_pos
     next_pos = int.from_bytes(mt_file.read(4), byteorder='little', signed=False)
     next_feat = int.from_bytes(mt_file.read(1), byteorder='little', signed=False)
 
@@ -314,7 +316,7 @@ def get_start_pos():
                 pos = int(pos_str)
 
 def main(stdscr):
-    global next_pos, next_feat, current_features, pos, size, pos_percent
+    global next_pos, next_feat, current_features, current_info , pos, size, pos_percent, scrw, scrh
     curses.start_color()
     curses.use_default_colors()
     stdscr.idlok(True)
@@ -359,6 +361,8 @@ def main(stdscr):
             if pos == next_pos:
                 while pos == next_pos:
                     update_features(mt_file)
+            if current_info and prev_info_pos and pos - prev_info_pos > scrw * scrh:
+                current_info = ""
             pos += 1
             nucleotide = (byte >> (2*(3-n))) & 3
             print_nucleotide(nucleotide, stdscr)
