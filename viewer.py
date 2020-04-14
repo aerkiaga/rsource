@@ -89,12 +89,12 @@ def next_line(stdscr):
     scrx = 0
     scry += 1
     if scry >= scrh:
-        stdscr.scroll()
-        scry = scrh - 1
         print_status(stdscr)
         get_input(stdscr)
         while(paused):
             get_input(stdscr)
+        stdscr.scroll()
+        scry = scrh - 1
 
 def next_char(stdscr):
     global scrx, scry, scrw, scrh, pos, size
@@ -363,9 +363,10 @@ def main(stdscr):
         update_features(mt_file)
 
     byte = file.read(1)
+    start_n = (pos-1) % 4
     while byte != b"":
         byte = int.from_bytes(byte, byteorder='little')
-        for n in range(0, 4):
+        for n in range(start_n, 4):
             if pos == 1:
                 for N in range(0, 10):
                     next_line(stdscr)
@@ -381,6 +382,7 @@ def main(stdscr):
             nucleotide = (byte >> (2*(3-n))) & 3
             print_nucleotide(nucleotide, stdscr)
         byte = file.read(1)
+        start_n = 0
     stdscr.getch()
 
 def index_closest(list, val):

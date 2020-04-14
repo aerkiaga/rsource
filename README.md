@@ -97,7 +97,7 @@ Soon after the start, there is a long string of repeated bases. The repeated
 sequence is `CCCTAA`. This sequence probably also extends into the "unknown" area.
 Now run:
 
-    python3 ./rsource.py 1.-12000
+    python3 ./rsource.py 1.-11000
 
 There are also repeated sequences before the large gap at the end. This time the
 repeated fragment is `TTAGGG`.
