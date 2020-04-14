@@ -86,6 +86,7 @@ items. Here is a list of regions to have a look at, laid out as a tutorial.
 
  * [Telomeres](#telomeres)
  * [Centromeres](#centromeres)
+ * [Gene desert](#gene-desert)
 
 ### Telomeres
 Run:
@@ -161,3 +162,53 @@ start to become wobblier: a few α-satellites of different lengths are grouped, 
 these groups themselves are also periodically repeated! Everything here has appeared
 through mutation and copying, all throughout evolution, introducing randomness and
 sheer complexity even in something as simple as a repeated sequence.
+
+### Gene desert
+Run:
+
+    python3 ./rsource.py 8.77500000
+
+The presented sequence is located between two genes (*PEX2* and *PKIA*) that are
+very far apart from each other. In fact, over a million bp away. From here, there
+are hundreds of thousands of bp to the next feature.
+
+What is its function? According to current knowledge, none. These regions comprise
+about 72% of our genome, and not only most of them haven't been found to be useful
+in any way, but mutations in these rarely appear to cause any effect whatsoever.
+Along with an additional 26% of non-coding DNA *within* genes, this adds up to a
+ridiculous 98% of total potentially useless material.
+
+Not all of this is "junk", however. Some of this non-coding DNA is known to perform
+various functions. A number of heritable diseases result from mutations outside
+genes, in these areas previously though to be irrelevant. Furthermore, a fraction
+of non-coding material is conserved between species, which means that evolution
+doesn't allow mutations in it "for free", suggesting some functional role.
+
+Still, the total estimated "useful" DNA in our cells is just about 5-15% of the total.
+The present region, for example, or at least most of it, is likely unnecessary.
+
+Not all organisms have as much non-coding DNA as us (98%). Bacteria, for instance,
+typically only have about 1/5 of it in their genome, in contrast to most other
+organisms. Some, however, have apparently managed to remove it altogether; the
+plant *Utricularia gibba* only has about 3%!
+
+Have a look at the sequence. What probably stands out more in it is the presence
+of relatively long strings of a single base, or a couple of them repeated over
+and over. These are called microsatellites, and give us a glimpse of what our DNA
+is actually made of.
+
+We talk about an issue with DNA copying machinery in [Telomeres](#telomeres).
+Here is another; when the copying proteins come across a series of short repeated
+sequences, the strand being built can slip and pair with the wrong repeat. If this
+happens, the resulting copy will have one repeat more or less than the original;
+generally, the tendency is to increase the repeat number. This process is overall
+highly unlikely, yet extremely common compared to other kinds of mutations. The
+mutation rate further increases with repeat number, logarithmically.
+
+This exemplifies an important truth about our DNA: most of it isn't there because
+we need it, but because it is (or once was) somehow able to copy itself around
+over and over. Microsatellites are a 3% of our genome, by themselves more than
+coding DNA; the rest is no different, composed of sequences with various strategies
+to "reproduce" inside the genome. DNA regions, thus, evolve by itself, for their
+own purposes, as long as they don't cause much harm to the organism they exist in.
+This is the Selfish Gene Theory of Natural Selection.
