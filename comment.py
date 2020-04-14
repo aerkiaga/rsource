@@ -5,8 +5,9 @@ import sys, os, re, bisect
 feature_encode = {
     'gap' : 0,
     'exon' : 1,
-    'pseudogene' : 2,
-    'gene' : 3
+    'CDS' : 2,
+    'pseudogene' : 3,
+    'gene' : 4
 } # 0-63
 end_encode = 128
 
@@ -17,13 +18,29 @@ current_ch = None
 ch_files = {}
 ch_arr_pos = {}
 ch_arr_feat = {}
+ch_arr_info = {}
 
 pattern_seqid = re.compile(r'NC_(\d+)')
+pattern_info_description = re.compile(r';description=([^;]*);')
+pattern_info_name = re.compile(r';Name=([^;]*);')
 
-def insert_feature(pos, feat):
+def insert_feature(pos, feat, info=None):
     index = bisect.bisect_right(ch_arr_pos[current_ch], pos)
     ch_arr_pos[current_ch].insert(index, pos)
     ch_arr_feat[current_ch].insert(index, feat)
+    ch_arr_info[current_ch].insert(index, info)
+
+def get_feature_info(feat, field):
+    if feat == feature_encode['gene']:
+        match = pattern_info_description.search(field)
+        if not match:
+            match = pattern_info_name.search(field)
+        if not match:
+            return None
+        info = match.group(1).encode()
+        info += b'\0'
+        return info
+    return None
 
 for line in sys.stdin:
     if line[0] != '#':
@@ -49,6 +66,7 @@ for line in sys.stdin:
             ch_files[current_ch] = open(current_ch_path, 'wb')
             ch_arr_pos[current_ch] = []
             ch_arr_feat[current_ch] = []
+            ch_arr_info[current_ch] = []
             if current_ch == 'mt':
                 print("Mitochondrial")
             else:
@@ -57,7 +75,8 @@ for line in sys.stdin:
         pos = int(fields[3])
         endpos = int(fields[4])
         feat = feature_encode[fields[2]]
-        insert_feature(pos, feat)
+        info = get_feature_info(feat, fields[8])
+        insert_feature(pos, feat, info)
         insert_feature(endpos, feat | end_encode)
 
 print("Annotating gaps and saving...")
@@ -80,4 +99,6 @@ for ch in ch_files.keys():
     for n in range(0, len(ch_arr_pos[ch])):
         file.write(ch_arr_pos[ch][n].to_bytes(4, byteorder='little', signed=False))
         file.write(ch_arr_feat[ch][n].to_bytes(1, byteorder='little', signed=False))
+        if ch_arr_info[ch][n]:
+            file.write(ch_arr_info[ch][n])
 print("Done!")

@@ -13,8 +13,9 @@ nucleotide_decoding = {
 feature_encode = {
     'gap' : 0,
     'exon' : 1,
-    'pseudogene' : 2,
-    'gene' : 3
+    'CDS' : 2,
+    'pseudogene' : 3,
+    'gene' : 4
 } # 0-63
 feature_mask = 63
 end_encode = 128
@@ -22,7 +23,8 @@ end_encode = 128
 PAIR_UNK = 0
 PAIR_NONE = 8
 PAIR_EXON_PSEUDO = 12
-PAIR_EXON_GENE = 16
+PAIR_UTR_GENE = 16
+PAIR_CDS = 20
 
 nucleotide_colors = {
     0 : 9,
@@ -35,7 +37,8 @@ nucleotide_colors = {
 region_colors = {
     PAIR_NONE : -1,
     PAIR_EXON_PSEUDO : 102,
-    PAIR_EXON_GENE : 170,
+    PAIR_UTR_GENE : 170,
+    PAIR_CDS : 63
 }
 
 script_path = os.path.realpath(__file__)
@@ -47,6 +50,7 @@ scrw = 80
 scrh = 25
 
 current_features = {}
+current_info = ""
 current_ch = "1"
 pos = 1
 pos_percent = False
@@ -63,8 +67,8 @@ def get_input(stdscr):
         scrx, scry = 0, 0
 
 def print_status(stdscr):
-    global pos, size
-    stdscr.addstr(0, 0, "{} ({:.3f}%)".format(pos, pos*100/size))
+    global pos, size, current_info
+    stdscr.addstr(0, 0, "{} ({:.3f}%) {}".format(pos, pos*100/size, current_info))
 
 def next_line(stdscr):
     global scrx, scry, scrw, scrh
@@ -97,9 +101,11 @@ def print_nucleotide(nucleotide, stdscr):
     if feature_encode['gap'] in current_features:
         nucleotide = 4
         pair = PAIR_UNK
+    elif feature_encode['CDS'] in current_features:
+        pair = PAIR_CDS + nucleotide
     elif feature_encode['exon'] in current_features:
         if feature_encode['gene'] in current_features:
-            pair = PAIR_EXON_GENE + nucleotide
+            pair = PAIR_UTR_GENE + nucleotide
         elif feature_encode['pseudogene'] in current_features:
             pair = PAIR_EXON_PSEUDO + nucleotide
         else:
@@ -262,8 +268,18 @@ def print_title(title, stdscr):
         next_line(stdscr)
     next_line(stdscr)
 
+def get_feature_info(feat, mt_file):
+    if feat == feature_encode['gene']:
+        info = b""
+        byte = mt_file.read(1)
+        while byte != b"\0":
+            info += byte
+            byte = mt_file.read(1)
+        return info.decode()
+    return ""
+
 def update_features(mt_file):
-    global next_pos, next_feat, current_features
+    global next_pos, next_feat, current_features, current_info
     if next_feat & end_encode:
         if (next_feat & feature_mask) not in current_features:
             pass
@@ -274,6 +290,9 @@ def update_features(mt_file):
         if (next_feat & feature_mask) not in current_features:
             current_features[next_feat & feature_mask] = 0
         current_features[next_feat & feature_mask] += 1
+    info = get_feature_info(next_feat, mt_file)
+    if info:
+        current_info = info
     next_pos = int.from_bytes(mt_file.read(4), byteorder='little', signed=False)
     next_feat = int.from_bytes(mt_file.read(1), byteorder='little', signed=False)
 
@@ -421,7 +440,8 @@ def parse_config():
     if 'Region Colors' in config:
         section = config['Region Colors']
         get_config_color(region_colors, PAIR_EXON_PSEUDO, section, 'pseudogene exon')
-        get_config_color(region_colors, PAIR_EXON_GENE, section, 'gene exon')
+        get_config_color(region_colors, PAIR_UTR_GENE, section, 'gene UTR')
+        get_config_color(region_colors, PAIR_CDS, section, 'CDS')
 
 parse_config()
 get_start_pos()
