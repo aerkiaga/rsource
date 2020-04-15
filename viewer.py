@@ -15,7 +15,10 @@ feature_encode = {
     'exon' : 1,
     'CDS' : 2,
     'pseudogene' : 3,
-    'gene' : 4
+    'gene' : 4,
+    'tRNA' : 5,
+    'rRNA' : 6,
+    'miRNA' : 7
 } # 0-63
 feature_mask = 63
 end_encode = 128
@@ -34,6 +37,9 @@ PAIR_UTR_GENE = 16
 PAIR_CDS = 20
 PAIR_CDS2 = 24
 PAIR_INTRON = 28
+PAIR_TRNA = 32
+PAIR_RRNA = 36
+PAIR_MIRNA = 40
 
 nucleotide_colors = {
     0 : 9,
@@ -49,7 +55,10 @@ region_colors = {
     PAIR_UTR_GENE : 170,
     PAIR_CDS : 63,
     PAIR_CDS2 : 105,
-    PAIR_INTRON : 232
+    PAIR_INTRON : 232,
+    PAIR_TRNA : 106,
+    PAIR_RRNA : 65,
+    PAIR_MIRNA : 136
 }
 
 other_colors = {
@@ -155,6 +164,12 @@ def print_nucleotide(nucleotide, stdscr):
         if current_frame & 3 == 3:
             current_frame ^= 4
             current_frame &= 4
+    elif feature_encode['tRNA'] in current_features:
+        pair = PAIR_TRNA + nucleotide
+    elif feature_encode['rRNA'] in current_features:
+        pair = PAIR_RRNA + nucleotide
+    elif feature_encode['miRNA'] in current_features:
+        pair = PAIR_MIRNA + nucleotide
     elif feature_encode['exon'] in current_features:
         if feature_encode['gene'] in current_features:
             pair = PAIR_UTR_GENE + nucleotide
@@ -494,6 +509,9 @@ def parse_config():
         get_config_color(region_colors, PAIR_CDS, section, 'CDS')
         get_config_color(region_colors, PAIR_CDS2, section, 'CDS 2')
         get_config_color(region_colors, PAIR_INTRON, section, 'intron')
+        get_config_color(region_colors, PAIR_TRNA, section, 'tRNA')
+        get_config_color(region_colors, PAIR_RRNA, section, 'rRNA')
+        get_config_color(region_colors, PAIR_MIRNA, section, 'miRNA')
     if 'Other Colors' in config:
         get_config_color(other_colors, PAIR_HIGHLIGHT, section, 'highlight')
 

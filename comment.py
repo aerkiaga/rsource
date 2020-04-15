@@ -7,7 +7,10 @@ feature_encode = {
     'exon' : 1,
     'CDS' : 2,
     'pseudogene' : 3,
-    'gene' : 4
+    'gene' : 4,
+    'tRNA' : 5,
+    'rRNA' : 6,
+    'miRNA' : 7
 } # 0-63
 end_encode = 128
 
