@@ -88,6 +88,7 @@ items. Here is a list of regions to have a look at, laid out as a tutorial.
  * [Telomeres](#telomeres)
  * [Centromeres](#centromeres)
  * [Genes](#genes)
+ * [Genes (part 2)](#genes-part-2)
  * [Gene desert](#gene-desert)
 
 ### Telomeres
@@ -222,7 +223,8 @@ is part of the longer sequence `CAGCCAATGA`, which signals a transcription site.
 The sequence, called a "CAAT box", changes a lot between genes, but the `CAAT`
 part is highly conserved. Other sequences decide how often and in what situations
 transcription should start; all this elements form the *promoter* of a gene, and
-are recognized by different proteins that control transcription.
+are recognized by different proteins that control transcription. Additionally,
+the transcribed section begins inside a sequence `GC ACTC`, called the Initiator.
 
 There are also sequences to signal intron/exon boundaries. All the exons here that
 are followed by an intron end with `AG`. After this, the intron starts with the
@@ -242,6 +244,30 @@ been chosen, even if other start codons are present in the mRNA.
 Finally, there can also be special elements in the 3' UTR. Near the end we see the
 sequence `AATAAA`, which basically signals that the transcript should be edited
 to protect it from being destroyed right away.
+
+### Genes (part 2)
+Here is a list of some more genes to explore.
+
+Location | Gene | Remarks
+---------|------|--------
+1.203127000 | *ADORA1* | This gene codes for a protein (adenosine receptor A1) that is the main target of caffeine. It has its 5' UTR split throughout 3 exons, but its entire coding region inside a single one.
+10.69269000 | *HK1* | This is one gene for hexokinase, the enzyme (protein) that breaks down glucose for energy. It's a large gene (~130 kbp), with many long introns. The start codon appears in many of the first exons: any of them may be chosen by alternate splicing (see [Genes](#genes)).
+11.5225000 | *HBB* | The hemoglobin β subunit mentioned in [Genes](#genes). It is located in the (-) strand, so everything in this (+) strand is inverted and all bases are the complementary (for example, the stop codon appears at the beginning of the coding region, and is `TTA` here, while the start codon is at the end, and reads `CAT`).
+17.50184000 | *COL1A1* | Gene for collagen type I subunit α1, also in the (-) strand. This gene has 51 exons.
+2.178522000 | *TTN* | This gene codes for titin, the longest protein known (over 30,000 amino acids). Titin is abundant in muscles, where it has an important structural role. The *TTN* gene itself spans over 280 kbp, and has 363 exons subject to alternate splicing. It lies in the (-) strand.
+4.73404000 | *ALB* | The gene for albumin, the most abundant protein in blood plasma. It is located in the (+) strand.
+
+Not all genes have the same promoter elements. The CAAT box is one of them, but
+not even the most important. This *ALB* gene, for example, has an element called
+a TATA box just upstream, with the sequence `TATATTA`. *ADORA1* doesn't appear
+to have a TATA box, but it possesses a GC box: `TGGCGGG`. *HK1* has a somewhat
+fuzzier "TATA-like" `ACTAATTG`, as well as a `GGACA` sequence in its 5' UTR,
+downstream from the transcription start site.
+
+Generally, the core promoter will have any combination of TATA, CAAT and GC boxes,
+and/or an Initiator. Other elements can even be in the 5' UTR. Plus the rest of
+the promoter, which can include sequences very far away that tightly control the
+transcription process.
 
 ### Gene desert
 Run:
