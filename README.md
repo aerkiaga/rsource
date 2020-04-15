@@ -90,6 +90,7 @@ items. Here is a list of regions to have a look at, laid out as a tutorial.
  * [Genes](#genes)
  * [Genes (part 2)](#genes-part-2)
  * [Gene desert](#gene-desert)
+ * [Transfer RNA](#transfer-rna)
 
 ### Telomeres
 Run:
@@ -318,3 +319,52 @@ coding DNA; the rest is no different, composed of sequences with various strateg
 to "reproduce" inside the genome. DNA regions, thus, evolve by itself, for their
 own purposes, as long as they don't cause much harm to the organism they exist in.
 This is the Selfish Gene Theory of Natural Selection.
+
+### Transfer RNA
+Run:
+
+    python3 ./rsource.py 1.16861000
+
+There is a single gene here, *TRG-CCC1-2*. Not much downstream, a second gene,
+*TRE-TTC3-1* lies overlapping a longer non-protein-coding gene. Shortly after, a
+third gene appears: *TRN-GTT13-1*. A while later, *TRN-GTT4-1*. These four genes
+stand out, highlighted by default with a different color than protein-coding genes.
+They are transcribed too, but the resulting transcript doesn't mature into a mRNA,
+but into a tRNA, a transfer RNA.
+
+Some tRNA genes undergo splicing. However, the overall maturation process is very
+different from that of mRNA. The resulting strand of tRNA then folds into a complex
+shape, by means of bases pairing with other bases elsewhere in the chain.
+
+In [Genes](#genes) we mention that codons (groups of 3 bases) are read and a single
+amino acid is placed for every codon. Each combination of 3 bases has an associated
+amino acid, constituting the Genetic Code for translation. This code is written
+in tRNAs; there are many of them, transcribed from different genes, and each one
+has two important features: an "anticodon" that pairs only with its specific codon,
+and an "acceptor stem" where some special proteins put the corresponding amino acid.
+
+Thus, it's easy to imagine how this works. The translation machinery tries to find
+a tRNA that fits with the codon it's currently reading; when it finds one, it takes
+its amino acid and appends it to the growing chain, then goes on with the next codon.
+
+For example, *TRG-CCC1-2* has a `CCC` anticodon near the middle. When it is
+transcribed and becomes folded, a `CCC` will be present in just the right place.
+Then, the aforementioned proteins will put a molecule of glycine (an amino acid)
+in the acceptor stem, bonded to it. When a `GGG` codon is encountered, this will
+be the only tRNA that will be able to pair with it, being A with U and G with C, in
+opposite-sense strands. Thus, that glycine will be taken from the tRNA and added
+to the new protein. Similarly, *TRE-TTC3-1* works with glutamic acid, and
+*TRN-GTT13-1* and *TRN-GTT4-1* with asparagine.
+
+The elements controlling transcription are very different here. Looking at the first
+gene, *TRG-CCC1-2*, there is a sequence *within* it, just after the beginning:
+`TGGTTCAGTGGT`. This is simply called an A box. After the middle of the tRNA gene,
+there is a second sequence, `GGTTCAATTCC`, a B box. Both elements are needed to
+initiate transcription, with different proteins performing the process from those
+of mRNA genes. Right after the end of the gene, we find `TTTTT`. A string of 4 or
+more Ts ends the transcription of a tRNA gene. The remaining three genes have very
+similar elements.
+
+There are hundreds of tRNA genes in our genome, even though only 64 combinations
+of 3 bases are possible. They are scattered across chromosomes, duplicated many
+times but pretty much conserved.
