@@ -87,6 +87,7 @@ items. Here is a list of regions to have a look at, laid out as a tutorial.
 
  * [Telomeres](#telomeres)
  * [Centromeres](#centromeres)
+ * [Genes](#genes)
  * [Gene desert](#gene-desert)
 
 ### Telomeres
@@ -164,6 +165,84 @@ these groups themselves are also periodically repeated! Everything here has appe
 through mutation and copying, all throughout evolution, introducing randomness and
 sheer complexity even in something as simple as a repeated sequence.
 
+### Genes
+Run:
+
+    python3 ./rsource.py 16.172000
+
+You should be right before ("upstream" of) the *HBA2* gene, for "Hemoglobin subunit
+alpha 2". You may see the *HBA1* gene ("Hemoglobin subunit alpha 1") a few kbp
+downstream. These two genes contain instructions to make these two subunits of
+the larger protein hemoglobin. One α1, one α2 and two β subunits (the HBB gene
+is in chromosome 11) form a complete hemoglobin molecule. Around these two genes
+there are other hemoglobin genes: downstream we find *HBQ1* (θ1), upstream there
+are *HBAP1* (a pseudogene, inactive remnant of a once real gene), *HBM* (μ), *HBZP1*
+(another pseudogene) and *HBZ* (ζ, is part of embryo hemoglobin). The fact that
+similar genes are right after one another is not a coincidence; they were produced
+through duplications and mutations, forming what is known as a gene cluster.
+
+Roughly speaking, genes contain instructions for making proteins, which are the
+actual "workers" of the cell. Just as DNA is a string of nucleotides, proteins
+are strings of amino acids, or assemblies of multiple such strings called subunits.
+The process for making proteins from genes is really complex and differs between
+organisms, but is fundamentally laid out like this: the DNA is *transcribed* into
+a similar molecule termed RNA, this RNA (primary transcript) is edited to make
+a messenger RNA (mRNA), and this mRNA is then read in chunks of 3 nucleotides
+called "codons", and for each possible codon a corresponding amino acid (there are
+20 of them) is appended to the growing amino acid chain.
+
+Look at the gene. It seems to be made of three large chunks, separated by two
+regions of a different type. When the gene is transcribed, the processing that
+makes that primary transcript into a mRNA involves (among other things) the removal
+of these intermediate regions (*introns*) and joing together of the three relevant
+fragments (*exons*). This is called "splicing" and means that a large portion of
+genetic material doesn't even get translated into protein. It serves a function,
+though. In some cases (not this), the same primary transcript can be spliced in
+different ways depending on the situation, leaving out a different set of regions
+to get a different mRNA, and thus a different protein. It is generally observed
+that more complex organisms tend to make more extensive use of this alternative
+splicing.
+
+After some other modifications that are not relevant to understanding the structure
+of a gene, an mRNA is obtained. One important difference with RNA in general vs DNA
+is that it has U (uracil) in place of T, with the same function. When the mRNA is
+to be read to make a protein, the translation machinery looks for a "start codon".
+This codon is AUG, so look for an ATG near the start. It's not *right* at the start,
+leaving an untraslated region of mRNA (the 5' UTR). The start codon also codes for
+an amino acid, the first of every translated protein. Then, 141 further codons are
+encountered, making a 142 amino acid chain. Translation ends when one of the three
+possible "stop codons" is found; in this gene, this last codon is UAA (TAA here).
+The stop codon doen't code for any amino acid, it only signals the end of the
+translated region and releases the new protein. After it, we can see another
+untranslated sequence (the 3' UTR).
+
+How does the transcription machinery know where to begin reading? If you look
+closely a little upstream of the gene, you should find the sequence `CAAT`. This
+is part of the longer sequence `CAGCCAATGA`, which signals a transcription site.
+The sequence, called a "CAAT box", changes a lot between genes, but the `CAAT`
+part is highly conserved. Other sequences decide how often and in what situations
+transcription should start; all this elements form the *promoter* of a gene, and
+are recognized by different proteins that control transcription.
+
+There are also sequences to signal intron/exon boundaries. All the exons here that
+are followed by an intron end with `AG`. After this, the intron starts with the
+sequence `GTGAG`. Then, near the end of the intron, there is a sequence like
+`CTCAC` or `CTGAC`, followed by a short run of mostly Cs and Ts, and finishing
+with `CAG`. These sequences are not exactly the same in all genes (although very
+similar), and there are alternate methods for delimiting introns and exons. The
+basic idea, however, is usually the same: the ends of an intron are recognized by
+proteins, brought together, and cut from the surrounding exons, that are joined.
+Not that splicing is done after transcription, so Ts here would actually be Us.
+
+The 5' UTR contains special sequences too. In fact, the start codon is part of a
+larger sequence, `GAACCCACC ATG G` in this case, named Kozak sequence after its
+discoverer, Marilyn S. Kozak. This ensures that the correct start location has
+been chosen, even if other start codons are present in the mRNA.
+
+Finally, there can also be special elements in the 3' UTR. Near the end we see the
+sequence `AATAAA`, which basically signals that the transcript should be edited
+to protect it from being destroyed right away.
+
 ### Gene desert
 Run:
 
@@ -176,8 +255,8 @@ are hundreds of thousands of bp to the next feature.
 What is its function? According to current knowledge, none. These regions comprise
 about 72% of our genome, and not only most of them haven't been found to be useful
 in any way, but mutations in these rarely appear to cause any effect whatsoever.
-Along with an additional 26% of non-coding DNA *within* genes, this adds up to a
-ridiculous 98% of total potentially useless material.
+Along with an additional 26% of non-coding DNA *within* genes (introns), this
+adds up to a ridiculous 98% of total potentially useless material.
 
 Not all of this is "junk", however. Some of this non-coding DNA is known to perform
 various functions. A number of heritable diseases result from mutations outside
