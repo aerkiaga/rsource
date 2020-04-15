@@ -74,6 +74,7 @@ for line in sys.stdin:
 
         pos = int(fields[3])
         endpos = int(fields[4])
+        endpos += 1
         feat = feature_encode[fields[2]]
         info = get_feature_info(feat, fields[8])
         insert_feature(pos, feat, info)
