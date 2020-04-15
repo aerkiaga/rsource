@@ -20,6 +20,12 @@ feature_encode = {
 feature_mask = 63
 end_encode = 128
 
+strand_decode = {
+    0 : '.',
+    1 : '+',
+    2 : '-'
+}
+
 PAIR_UNK = 0
 PAIR_HIGHLIGHT = 1
 PAIR_NONE = 8
@@ -62,6 +68,7 @@ highlight = {
 
 current_features = {}
 current_info = ""
+current_info_strand = 0
 current_ch = "1"
 pos = 1
 size = None
@@ -84,7 +91,11 @@ def get_input(stdscr):
 
 def print_status(stdscr):
     global pos, size, current_info
-    stdscr.addstr(0, 0, "{} ({:.3f}%) {}".format(pos, pos*100/size, current_info))
+    status = "{} ({:.3f}%)".format(pos, pos*100/size)
+    if current_info:
+        status += " {} ({})".format(current_info, strand_decode[current_info_strand])
+
+    stdscr.addstr(0, 0, status)
 
 def next_line(stdscr):
     global scrx, scry, scrw, scrh, paused
@@ -306,8 +317,10 @@ def print_title(title, stdscr):
     next_line(stdscr)
 
 def get_feature_info(feat, mt_file):
+    global current_info_strand
     if feat == feature_encode['gene']:
         info = b""
+        current_info_strand = int.from_bytes(mt_file.read(1), byteorder='little')
         byte = mt_file.read(1)
         while byte != b"\0":
             info += byte

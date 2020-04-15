@@ -11,6 +11,12 @@ feature_encode = {
 } # 0-63
 end_encode = 128
 
+strand_encode = {
+    '.' : 0,
+    '+' : 1,
+    '-' : 2
+}
+
 script_path = os.path.realpath(__file__)
 path = os.path.dirname(script_path)
 
@@ -30,14 +36,15 @@ def insert_feature(pos, feat, info=None):
     ch_arr_feat[current_ch].insert(index, feat)
     ch_arr_info[current_ch].insert(index, info)
 
-def get_feature_info(feat, field):
+def get_feature_info(feat, fields):
     if feat == feature_encode['gene']:
-        match = pattern_info_description.search(field)
+        match = pattern_info_description.search(fields[8])
         if not match:
-            match = pattern_info_name.search(field)
+            match = pattern_info_name.search(fields[8])
         if not match:
             return None
-        info = match.group(1).encode()
+        info = strand_encode[fields[6]].to_bytes(1, byteorder='little')
+        info += match.group(1).encode()
         info += b'\0'
         return info
     return None
@@ -76,7 +83,7 @@ for line in sys.stdin:
         endpos = int(fields[4])
         endpos += 1
         feat = feature_encode[fields[2]]
-        info = get_feature_info(feat, fields[8])
+        info = get_feature_info(feat, fields)
         insert_feature(pos, feat, info)
         insert_feature(endpos, feat | end_encode)
 
