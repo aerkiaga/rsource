@@ -93,6 +93,8 @@ nucleotide_encoding = {
     'T' : 3,
 }
 
+wildcard_nucleotides = ['B', 'D', 'H', 'K', 'M', 'N', 'R', 'S', 'V', 'W', 'Y']
+
 script_path = os.path.realpath(__file__)
 path = os.path.dirname(script_path)
 
@@ -159,7 +161,7 @@ for line in sys.stdin:
                     if current_ch in gap_starts:
                         gap_files[current_ch].write(ch_lengths[current_ch].to_bytes(4, byteorder='little', signed=False))
                         del gap_starts[current_ch]
-                elif c == 'N':
+                elif c in wildcard_nucleotides:
                     ch_bytes[current_ch] = (ch_bytes[current_ch] << 2)
                     ch_lengths[current_ch] += 1
                     if ch_lengths[current_ch] % 4 == 0:
