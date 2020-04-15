@@ -47,6 +47,9 @@ def get_feature_info(feat, fields):
         info += match.group(1).encode()
         info += b'\0'
         return info
+    elif feat == feature_encode['CDS']:
+        info = int(fields[7]).to_bytes(1, byteorder='little')
+        return info
     return None
 
 for line in sys.stdin:

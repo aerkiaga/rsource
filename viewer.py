@@ -32,7 +32,8 @@ PAIR_NONE = 8
 PAIR_EXON_PSEUDO = 12
 PAIR_UTR_GENE = 16
 PAIR_CDS = 20
-PAIR_INTRON = 24
+PAIR_CDS2 = 24
+PAIR_INTRON = 28
 
 nucleotide_colors = {
     0 : 9,
@@ -47,6 +48,7 @@ region_colors = {
     PAIR_EXON_PSEUDO : 102,
     PAIR_UTR_GENE : 170,
     PAIR_CDS : 63,
+    PAIR_CDS2 : 105,
     PAIR_INTRON : 232
 }
 
@@ -78,6 +80,7 @@ prev_info_pos = None
 prev_nucleotide = None
 pos_percent = False
 paused = False
+current_frame = 0
 
 def get_input(stdscr):
     global scrw, scrh, paused
@@ -138,13 +141,20 @@ def set_prev_pairs(number, pair, stdscr):
         stdscr.chgat(y, x, curses.color_pair(pair))
 
 def print_nucleotide(nucleotide, stdscr):
-    global current_feature, prev_nucleotide, highlight
+    global current_feature, prev_nucleotide, highlight, current_frame
     pair = None
     if feature_encode['gap'] in current_features:
         nucleotide = 4
         pair = PAIR_UNK
     elif feature_encode['CDS'] in current_features:
-        pair = PAIR_CDS + nucleotide
+        if current_frame & 4:
+            pair = PAIR_CDS2 + nucleotide
+        else:
+            pair = PAIR_CDS + nucleotide
+        current_frame += 1
+        if current_frame & 3 == 3:
+            current_frame ^= 4
+            current_frame &= 4
     elif feature_encode['exon'] in current_features:
         if feature_encode['gene'] in current_features:
             pair = PAIR_UTR_GENE + nucleotide
@@ -317,7 +327,7 @@ def print_title(title, stdscr):
     next_line(stdscr)
 
 def get_feature_info(feat, mt_file):
-    global current_info_strand
+    global current_info_strand, current_frame
     if feat == feature_encode['gene']:
         info = b""
         current_info_strand = int.from_bytes(mt_file.read(1), byteorder='little')
@@ -326,6 +336,9 @@ def get_feature_info(feat, mt_file):
             info += byte
             byte = mt_file.read(1)
         return info.decode()
+    if feat == feature_encode['CDS']:
+        phase = int.from_bytes(mt_file.read(1), byteorder='little')
+        current_frame = (current_frame & 4) | (3 - phase) % 3
     return ""
 
 def update_features(mt_file):
@@ -479,6 +492,7 @@ def parse_config():
         get_config_color(region_colors, PAIR_EXON_PSEUDO, section, 'pseudogene exon')
         get_config_color(region_colors, PAIR_UTR_GENE, section, 'gene UTR')
         get_config_color(region_colors, PAIR_CDS, section, 'CDS')
+        get_config_color(region_colors, PAIR_CDS2, section, 'CDS 2')
         get_config_color(region_colors, PAIR_INTRON, section, 'intron')
     if 'Other Colors' in config:
         get_config_color(other_colors, PAIR_HIGHLIGHT, section, 'highlight')
