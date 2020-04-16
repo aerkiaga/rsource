@@ -144,7 +144,7 @@ class Reader:
         self.current_info = ""
         self.prev_info_pos = None
 
-        while(self.pos > self.next_pos and self.next_pos > 0):
+        while(self.pos >= self.next_pos and self.next_pos > 0):
             self.update_features()
 
         self.byte = self.file.read(1)
@@ -177,16 +177,6 @@ class Reader:
         self.file.close()
         self.mt_file.close()
 
-def get_input(stdscr):
-    global scrw, scrh, paused
-    time.sleep(0.1)
-    key = stdscr.getch()
-    if key == curses.KEY_RESIZE:
-        scrh, scrw = stdscr.getmaxyx()
-        scrx, scry = 0, 0
-    elif key == ord('\n') or key == curses.KEY_ENTER or key == ord(' '):
-        paused = not paused
-
 class View:
     def __init__(self, reader, stdscr):
         self.reader = reader
@@ -204,27 +194,27 @@ class View:
         scrx = 0
         scry += 1
         if scry >= scrh:
-            self.print_status()
-            get_input(self.screen)
-            while(paused):
-                get_input(self.screen)
-            self.screen.scroll()
             scry = scrh - 1
+            return True
+        else:
+            return False
 
     def next_char(self):
         global scrx, scry, scrw, scrh, pos, size
         scrx += 1
         if scrx >= scrw-1:
-            self.next_line()
+            return self.next_line()
+        else:
+            return False
 
     def print_char(self, char, pair):
         global scrx, scry
         try:
             self.screen.addch(scry, scrx, char, curses.color_pair(pair))
-            self.next_char()
+            return self.next_char()
         except curses.error:
-            self.next_char()
-            self.print_char(char, pair)
+            r = self.next_char()
+            return r or self.print_char(char, pair)
 
     def set_prev_pairs(self, number, pair):
         global scrx, scry, scrw, scrh
@@ -277,7 +267,7 @@ class View:
             pair = PAIR_HIGHLIGHT
             self.set_prev_pairs(1, PAIR_HIGHLIGHT)
         prev_nucleotide = nucleotide
-        self.print_char(nucleotide_decoding[nucleotide], pair)
+        return self.print_char(nucleotide_decoding[nucleotide], pair)
 
     def print_title(self, title):
           #####      ##    #######   #######  ##        ########  #######  ########  #######   #######  ##     ## ##    ##
@@ -433,22 +423,31 @@ class View:
             self.next_line()
         self.next_line()
 
-    def scroll_down(self, n):
-        while n > 0 and not self.reader.eof:
+    def fill(self):
+        while not self.reader.eof:
             if self.reader.pos == 1:
                 for N in range(0, 10):
                     self.next_line()
                 self.print_title(self.reader.ch)
             if self.reader.pos == self.reader.ch_size:
                 break
-            self.print_nucleotide()
+            if self.print_nucleotide():
+                self.print_status()
+                break
+            self.reader.advance()
+
+    def scroll_down(self, n):
+        while n > 0 and not self.reader.eof:
+            self.screen.scroll()
+            self.fill()
+            n -= 1
             self.reader.advance()
 
     def __del__(self):
         pass
 
 def main(stdscr):
-    global paused, current_reader
+    global paused, current_reader, scrw, scrh
     curses.start_color()
     curses.use_default_colors()
     stdscr.idlok(True)
@@ -462,9 +461,19 @@ def main(stdscr):
 
     reader = Reader()
     view = View(reader, stdscr)
+    view.fill()
 
     while not reader.eof:
-        view.scroll_down(1)
+        if not paused:
+            view.scroll_down(1)
+
+        time.sleep(0.1)
+        key = stdscr.getch()
+        if key == curses.KEY_RESIZE:
+            scrh, scrw = view.screen.getmaxyx()
+            scrx, scry = 0, 0
+        elif key == ord('\n') or key == curses.KEY_ENTER or key == ord(' '):
+            paused = not paused
 
     stdscr.getch()
 
