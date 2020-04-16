@@ -242,7 +242,7 @@ class View:
         scrx = 0
         scry += 1
         if scry >= scrh:
-            scry = scrh - 1
+            scry = 0
             return True
         else:
             return False
@@ -489,17 +489,23 @@ class View:
     def scroll_down(self, n):
         global scrw, scrh, scrx, scry
         while n > 0 and not self.reader.eof:
-            self.screen.scroll()
+            self.screen.scroll(1)
             self.top_pos += scrw-1
+            scry = scrh-1
             self.fill()
             n -= 1
 
     def scroll_up(self, n):
         global scrw, scrh, scrx, scry
-        self.reader.jump_to(self.top_pos - (scrw-1))
-        self.top_pos -= (scrw-1) * n
-        scrx = scry = 0
-        self.fill()
+        while n > 0:
+            self.screen.scroll(-1)
+            self.top_pos -= scrw-1
+            self.reader.jump_to(self.top_pos - (scrw-1))
+            tmp = scrh
+            scrh = 2
+            self.fill()
+            scrh = tmp
+            n -= 1
 
     def resize(self, W, H):
         global scrw, scrh, scrx, scry
