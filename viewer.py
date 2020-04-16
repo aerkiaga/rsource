@@ -127,6 +127,8 @@ class Reader:
         self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
 
     def unget_feature(self):
+        if self.mt_file.tell() < 10:
+            return None
         self.mt_file.seek(self.mt_file.tell() - 6)
         cur_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
         if cur_feat == feature_encode['gene']:
@@ -140,16 +142,25 @@ class Reader:
 
     def update_features_backwards(self):
         self.next_pos = self.cur_feat_pos
-        lost_feat = self.unget_feature()
+        # we are after the new next-to-next's type
+        lost_feat = self.unget_feature() # new next (previous current)
         self.apply_feature(lost_feat ^ end_encode)
-        self.unget_feature()
-        self.mt_file.seek(self.mt_file.tell() - 5)
-        self.cur_feat_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False)
-        self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
-        self.get_feature_info()
-        self.next_feat = lost_feat
-        self.mt_file.read(5)
-        pass
+        # we are after the new next's type
+        exists = self.unget_feature() # new current
+        if exists is not None:
+            # we are after the new current's type
+            self.mt_file.seek(self.mt_file.tell() - 5)
+            # we are at the new current
+            self.cur_feat_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False) # position
+            self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False) # type (actually of the current one)
+            self.get_feature_info() # skip info with current type
+            # we are at the next
+            self.mt_file.read(5)
+            # we are after the new next's type
+        else:
+            # we are after the new next's type
+            self.cur_feat_pos = None
+        self.next_feat = lost_feat # new next (previous current)
 
     def get_byte(self):
         self.byte = self.file.read(1)
@@ -214,7 +225,7 @@ class Reader:
             while(P >= self.next_pos and self.next_pos > 0):
                 self.update_features()
         if P < self.pos:
-            while(P < self.cur_feat_pos):
+            while(self.cur_feat_pos and P < self.cur_feat_pos):
                 self.update_features_backwards()
         self.pos = P
         self.seek_pos()
@@ -480,16 +491,16 @@ class View:
                     self.next_line()
                 self.print_title(self.reader.ch)
             full = self.print_nucleotide()
-            if full:
-                self.print_status()
             self.reader.advance()
             if full:
                 break
+        self.print_status()
 
     def scroll_down(self, n):
         global scrw, scrh, scrx, scry
         while n > 0 and not self.reader.eof:
             self.screen.scroll(1)
+            self.reader.jump_to(self.top_pos + (scrw-1)*scrh)
             self.top_pos += scrw-1
             scry = scrh-1
             self.fill()
@@ -497,10 +508,10 @@ class View:
 
     def scroll_up(self, n):
         global scrw, scrh, scrx, scry
-        while n > 0:
+        while n > 0 and self.top_pos - (scrw-1) >= 1:
             self.screen.scroll(-1)
             self.top_pos -= scrw-1
-            self.reader.jump_to(self.top_pos - (scrw-1))
+            self.reader.jump_to(self.top_pos)
             tmp = scrh
             scrh = 2
             self.fill()
