@@ -503,6 +503,7 @@ class View:
             self.reader.jump_to(self.top_pos + (scrw-1)*scrh)
             self.top_pos += scrw-1
             scry = scrh-1
+            scrx = 0
             self.fill()
             n -= 1
 
@@ -514,6 +515,7 @@ class View:
             self.reader.jump_to(self.top_pos)
             tmp = scrh
             scrh = 2
+            scry = scrx = 0
             self.fill()
             scrh = tmp
             n -= 1
