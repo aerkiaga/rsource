@@ -174,7 +174,8 @@ class Reader:
             self.current_info = ""
 
     def __del__(self):
-        pass
+        self.file.close()
+        self.mt_file.close()
 
 def get_input(stdscr):
     global scrw, scrh, paused
@@ -186,249 +187,265 @@ def get_input(stdscr):
     elif key == ord('\n') or key == curses.KEY_ENTER or key == ord(' '):
         paused = not paused
 
-current_reader = None
+class View:
+    def __init__(self, reader, stdscr):
+        self.reader = reader
+        self.screen = stdscr
 
-def print_status(stdscr):
-    global current_reader
-    status = "{} ({:.3f}%)".format(current_reader.pos, current_reader.pos*100/current_reader.ch_size)
-    if current_reader.current_info:
-        status += " {} ({})".format(current_reader.current_info, strand_decode[current_info_strand])
+    def print_status(self):
+        status = "{} ({:.3f}%)".format(self.reader.pos, self.reader.pos*100/self.reader.ch_size)
+        if self.reader.current_info:
+            status += " {} ({})".format(self.reader.current_info, strand_decode[current_info_strand])
 
-    stdscr.addstr(0, 0, status)
+        self.screen.addstr(0, 0, status)
 
-def next_line(stdscr):
-    global scrx, scry, scrw, scrh, paused
-    scrx = 0
-    scry += 1
-    if scry >= scrh:
-        print_status(stdscr)
-        get_input(stdscr)
-        while(paused):
-            get_input(stdscr)
-        stdscr.scroll()
-        scry = scrh - 1
+    def next_line(self):
+        global scrx, scry, scrw, scrh, paused
+        scrx = 0
+        scry += 1
+        if scry >= scrh:
+            self.print_status()
+            get_input(self.screen)
+            while(paused):
+                get_input(self.screen)
+            self.screen.scroll()
+            scry = scrh - 1
 
-def next_char(stdscr):
-    global scrx, scry, scrw, scrh, pos, size
-    scrx += 1
-    if scrx >= scrw-1:
-        next_line(stdscr)
+    def next_char(self):
+        global scrx, scry, scrw, scrh, pos, size
+        scrx += 1
+        if scrx >= scrw-1:
+            self.next_line()
 
-def print_char(char, pair, stdscr):
-    global scrx, scry
-    try:
-        stdscr.addch(scry, scrx, char, curses.color_pair(pair))
-        next_char(stdscr)
-    except curses.error:
-        next_char(stdscr)
-        print_char(char, pair, stdscr)
+    def print_char(self, char, pair):
+        global scrx, scry
+        try:
+            self.screen.addch(scry, scrx, char, curses.color_pair(pair))
+            self.next_char()
+        except curses.error:
+            self.next_char()
+            self.print_char(char, pair)
 
-def set_prev_pairs(number, pair, stdscr):
-    global scrx, scry, scrw, scrh
-    x = scrx
-    y = scry
-    for n in range(0, number):
-        x -= 1
-        if x < 0:
-            x = scrw-2
-            y -= 1
-            if y < 0:
-                break
-        stdscr.chgat(y, x, curses.color_pair(pair))
+    def set_prev_pairs(self, number, pair):
+        global scrx, scry, scrw, scrh
+        x = scrx
+        y = scry
+        for n in range(0, number):
+            x -= 1
+            if x < 0:
+                x = scrw-2
+                y -= 1
+                if y < 0:
+                    break
+            self.screen.chgat(y, x, curses.color_pair(pair))
 
-def print_nucleotide(reader, stdscr):
-    global prev_nucleotide, highlight, current_frame
-    pair = None
-    nucleotide = reader.read()
-    features = reader.current_features
-    if feature_encode['gap'] in features:
-        nucleotide = 4
-        pair = PAIR_UNK
-    elif feature_encode['CDS'] in features:
-        if current_frame & 4:
-            pair = PAIR_CDS2 + nucleotide
-        else:
-            pair = PAIR_CDS + nucleotide
-        current_frame += 1
-        if current_frame & 3 == 3:
-            current_frame ^= 4
-            current_frame &= 4
-    elif feature_encode['tRNA'] in features:
-        pair = PAIR_TRNA + nucleotide
-    elif feature_encode['rRNA'] in features:
-        pair = PAIR_RRNA + nucleotide
-    elif feature_encode['miRNA'] in features:
-        pair = PAIR_MIRNA + nucleotide
-    elif feature_encode['exon'] in features:
-        if feature_encode['gene'] in features:
-            pair = PAIR_UTR_GENE + nucleotide
-        elif feature_encode['pseudogene'] in features:
-            pair = PAIR_EXON_PSEUDO + nucleotide
-        else:
+    def print_nucleotide(self):
+        global prev_nucleotide, highlight, current_frame
+        pair = None
+        nucleotide = self.reader.read()
+        features = self.reader.current_features
+        if feature_encode['gap'] in features:
+            nucleotide = 4
             pair = PAIR_UNK
-    elif feature_encode['gene'] in features or feature_encode['pseudogene'] in features:
-        pair = PAIR_INTRON + nucleotide
-    else:
-        pair = PAIR_NONE + nucleotide
-    if highlight['cpg'] and prev_nucleotide == 1 and nucleotide == 2:
-        pair = PAIR_HIGHLIGHT
-        set_prev_pairs(1, PAIR_HIGHLIGHT, stdscr)
-    prev_nucleotide = nucleotide
-    print_char(nucleotide_decoding[nucleotide], pair, stdscr)
+        elif feature_encode['CDS'] in features:
+            if current_frame & 4:
+                pair = PAIR_CDS2 + nucleotide
+            else:
+                pair = PAIR_CDS + nucleotide
+            current_frame += 1
+            if current_frame & 3 == 3:
+                current_frame ^= 4
+                current_frame &= 4
+        elif feature_encode['tRNA'] in features:
+            pair = PAIR_TRNA + nucleotide
+        elif feature_encode['rRNA'] in features:
+            pair = PAIR_RRNA + nucleotide
+        elif feature_encode['miRNA'] in features:
+            pair = PAIR_MIRNA + nucleotide
+        elif feature_encode['exon'] in features:
+            if feature_encode['gene'] in features:
+                pair = PAIR_UTR_GENE + nucleotide
+            elif feature_encode['pseudogene'] in features:
+                pair = PAIR_EXON_PSEUDO + nucleotide
+            else:
+                pair = PAIR_UNK
+        elif feature_encode['gene'] in features or feature_encode['pseudogene'] in features:
+            pair = PAIR_INTRON + nucleotide
+        else:
+            pair = PAIR_NONE + nucleotide
+        if highlight['cpg'] and prev_nucleotide == 1 and nucleotide == 2:
+            pair = PAIR_HIGHLIGHT
+            self.set_prev_pairs(1, PAIR_HIGHLIGHT)
+        prev_nucleotide = nucleotide
+        self.print_char(nucleotide_decoding[nucleotide], pair)
 
-  #####      ##    #######   #######  ##        ########  #######  ########  #######   #######  ##     ## ##    ##
- ##   ##   ####   ##     ## ##     ## ##    ##  ##       ##     ## ##    ## ##     ## ##     ##  ##   ##   ##  ##                ##
-##     ##    ##          ##        ## ##    ##  ##       ##            ##   ##     ## ##     ##   ## ##     ####   ## ##  ##  ########
-##     ##    ##    #######   #######  ##    ##  #######  ########     ##     #######   ########    ###       ##    ### ### ##    ##
-##     ##    ##   ##               ## #########       ## ##     ##   ##     ##     ##        ##   ## ##      ##    ##  ##  ##    ##
- ##   ##     ##   ##        ##     ##       ##  ##    ## ##     ##   ##     ##     ## ##     ##  ##   ##     ##    ##  ##  ##    ##
-  #####    ###### #########  #######        ##   ######   #######    ##      #######   #######  ##     ##    ##    ##  ##  ##     ####
+    def print_title(self, title):
+          #####      ##    #######   #######  ##        ########  #######  ########  #######   #######  ##     ## ##    ##
+         ##   ##   ####   ##     ## ##     ## ##    ##  ##       ##     ## ##    ## ##     ## ##     ##  ##   ##   ##  ##                ##
+        ##     ##    ##          ##        ## ##    ##  ##       ##            ##   ##     ## ##     ##   ## ##     ####   ## ##  ##  ########
+        ##     ##    ##    #######   #######  ##    ##  #######  ########     ##     #######   ########    ###       ##    ### ### ##    ##
+        ##     ##    ##   ##               ## #########       ## ##     ##   ##     ##     ##        ##   ## ##      ##    ##  ##  ##    ##
+         ##   ##     ##   ##        ##     ##       ##  ##    ## ##     ##   ##     ##     ## ##     ##  ##   ##     ##    ##  ##  ##    ##
+          #####    ###### #########  #######        ##   ######   #######    ##      #######   #######  ##     ##    ##    ##  ##  ##     ####
 
-def print_title(title, stdscr):
-    global scrw
-    chars = {
-        '0' : [
-            "  #####    ",
-            " ##   ##   ",
-            "##     ##  ",
-            "##     ##  ",
-            "##     ##  ",
-            " ##   ##   ",
-            "  #####    ",
-        ],
-        '1' : [
-            "  ##   ",
-            "####   ",
-            "  ##   ",
-            "  ##   ",
-            "  ##   ",
-            "  ##   ",
-            "###### ",
-        ],
-        '2' : [
-            " #######  ",
-            "##     ## ",
-            "       ## ",
-            " #######  ",
-            "##        ",
-            "##        ",
-            "######### ",
-        ],
-        '3' : [
-            " #######  ",
-            "##     ## ",
-            "       ## ",
-            " #######  ",
-            "       ## ",
-            "##     ## ",
-            " #######  ",
-        ],
-        '4' : [
-            "##        ",
-            "##    ##  ",
-            "##    ##  ",
-            "##    ##  ",
-            "######### ",
-            "      ##  ",
-            "      ##  ",
-        ],
-        '5' : [
-            "######## ",
-            "##       ",
-            "##       ",
-            "#######  ",
-            "      ## ",
-            "##    ## ",
-            " ######  ",
-        ],
-        '6' : [
-            " #######  ",
-            "##     ## ",
-            "##        ",
-            "########  ",
-            "##     ## ",
-            "##     ## ",
-            " #######  ",
-        ],
-        '7' : [
-            "######## ",
-            "##    ## ",
-            "    ##   ",
-            "   ##    ",
-            "  ##     ",
-            "  ##     ",
-            "  ##     ",
-        ],
-        '8' : [
-            " #######  ",
-            "##     ## ",
-            "##     ## ",
-            " #######  ",
-            "##     ## ",
-            "##     ## ",
-            " #######  ",
-        ],
-        '9' : [
-            " #######  ",
-            "##     ## ",
-            "##     ## ",
-            " ######## ",
-            "       ## ",
-            "##     ## ",
-            " #######  ",
-        ],
-        'X' : [
-            "##     ## ",
-            " ##   ##  ",
-            "  ## ##   ",
-            "   ###    ",
-            "  ## ##   ",
-            " ##   ##  ",
-            "##     ## ",
-        ],
-        'Y' : [
-            "##    ## ",
-            " ##  ##  ",
-            "  ####   ",
-            "   ##    ",
-            "   ##    ",
-            "   ##    ",
-            "   ##    ",
-        ],
-        'm' : [
-            "           ",
-            "           ",
-            "## ##  ##  ",
-            "### ### ## ",
-            "##  ##  ## ",
-            "##  ##  ## ",
-            "##  ##  ## ",
-        ],
-        't' : [
-            "         ",
-            "   ##    ",
-            "######## ",
-            "   ##    ",
-            "   ##    ",
-            "   ##    ",
-            "    #### ",
-        ],
-    }
-    length = 0
-    for C in title:
-        length += len(chars[C][0])
-    next_line(stdscr)
-    pad = (scrw - length)//2
-    if pad < 0:
-        pad = 0
-    for n in range(0, len(chars['0'])):
-        for m in range(0, pad):
-            print_char(" ", PAIR_UNK, stdscr)
+        global scrw
+        chars = {
+            '0' : [
+                "  #####    ",
+                " ##   ##   ",
+                "##     ##  ",
+                "##     ##  ",
+                "##     ##  ",
+                " ##   ##   ",
+                "  #####    ",
+            ],
+            '1' : [
+                "  ##   ",
+                "####   ",
+                "  ##   ",
+                "  ##   ",
+                "  ##   ",
+                "  ##   ",
+                "###### ",
+            ],
+            '2' : [
+                " #######  ",
+                "##     ## ",
+                "       ## ",
+                " #######  ",
+                "##        ",
+                "##        ",
+                "######### ",
+            ],
+            '3' : [
+                " #######  ",
+                "##     ## ",
+                "       ## ",
+                " #######  ",
+                "       ## ",
+                "##     ## ",
+                " #######  ",
+            ],
+            '4' : [
+                "##        ",
+                "##    ##  ",
+                "##    ##  ",
+                "##    ##  ",
+                "######### ",
+                "      ##  ",
+                "      ##  ",
+            ],
+            '5' : [
+                "######## ",
+                "##       ",
+                "##       ",
+                "#######  ",
+                "      ## ",
+                "##    ## ",
+                " ######  ",
+            ],
+            '6' : [
+                " #######  ",
+                "##     ## ",
+                "##        ",
+                "########  ",
+                "##     ## ",
+                "##     ## ",
+                " #######  ",
+            ],
+            '7' : [
+                "######## ",
+                "##    ## ",
+                "    ##   ",
+                "   ##    ",
+                "  ##     ",
+                "  ##     ",
+                "  ##     ",
+            ],
+            '8' : [
+                " #######  ",
+                "##     ## ",
+                "##     ## ",
+                " #######  ",
+                "##     ## ",
+                "##     ## ",
+                " #######  ",
+            ],
+            '9' : [
+                " #######  ",
+                "##     ## ",
+                "##     ## ",
+                " ######## ",
+                "       ## ",
+                "##     ## ",
+                " #######  ",
+            ],
+            'X' : [
+                "##     ## ",
+                " ##   ##  ",
+                "  ## ##   ",
+                "   ###    ",
+                "  ## ##   ",
+                " ##   ##  ",
+                "##     ## ",
+            ],
+            'Y' : [
+                "##    ## ",
+                " ##  ##  ",
+                "  ####   ",
+                "   ##    ",
+                "   ##    ",
+                "   ##    ",
+                "   ##    ",
+            ],
+            'm' : [
+                "           ",
+                "           ",
+                "## ##  ##  ",
+                "### ### ## ",
+                "##  ##  ## ",
+                "##  ##  ## ",
+                "##  ##  ## ",
+            ],
+            't' : [
+                "         ",
+                "   ##    ",
+                "######## ",
+                "   ##    ",
+                "   ##    ",
+                "   ##    ",
+                "    #### ",
+            ],
+        }
+        length = 0
         for C in title:
-            for c in chars[C][n]:
-                print_char(c, PAIR_UNK, stdscr)
-        next_line(stdscr)
-    next_line(stdscr)
+            length += len(chars[C][0])
+        self.next_line()
+        pad = (scrw - length)//2
+        if pad < 0:
+            pad = 0
+        for n in range(0, len(chars['0'])):
+            for m in range(0, pad):
+                self.print_char(" ", PAIR_UNK)
+            for C in title:
+                for c in chars[C][n]:
+                    self.print_char(c, PAIR_UNK)
+            self.next_line()
+        self.next_line()
+
+    def scroll_down(self, n):
+        while n > 0 and not self.reader.eof:
+            if self.reader.pos == 1:
+                for N in range(0, 10):
+                    self.next_line()
+                self.print_title(self.reader.ch)
+            if self.reader.pos == self.reader.ch_size:
+                break
+            self.print_nucleotide()
+            self.reader.advance()
+
+    def __del__(self):
+        pass
 
 def main(stdscr):
     global paused, current_reader
@@ -443,17 +460,12 @@ def main(stdscr):
             curses.init_pair(pair + offset, foreground, background)
     curses.init_pair(PAIR_HIGHLIGHT, 0, other_colors[PAIR_HIGHLIGHT])
 
-    current_reader = reader = Reader()
+    reader = Reader()
+    view = View(reader, stdscr)
 
     while not reader.eof:
-        if reader.pos == 1:
-            for N in range(0, 10):
-                next_line(stdscr)
-            print_title(reader.ch, stdscr)
-        if reader.pos == reader.ch_size:
-            break
-        print_nucleotide(reader, stdscr)
-        reader.advance()
+        view.scroll_down(1)
+
     stdscr.getch()
 
 def index_closest(list, val):
