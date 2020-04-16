@@ -77,19 +77,104 @@ highlight = {
     'cpg' : False
 }
 
-current_features = {}
-current_info = ""
 current_info_strand = 0
-current_ch = "1"
-pos = 1
-size = None
-next_pos = None
-next_feat = None
-prev_info_pos = None
-prev_nucleotide = None
+ch_initial = "1"
+pos_initial = 1
 pos_percent = False
+prev_nucleotide = None
 paused = False
 current_frame = 0
+
+class Reader:
+    def get_feature_info(self):
+        global current_info_strand, current_frame
+        if self.next_feat == feature_encode['gene']:
+            info = b""
+            current_info_strand = int.from_bytes(self.mt_file.read(1), byteorder='little')
+            byte = self.mt_file.read(1)
+            while byte != b"\0":
+                info += byte
+                byte = self.mt_file.read(1)
+            return info.decode()
+        if self.next_feat == feature_encode['CDS']:
+            phase = int.from_bytes(self.mt_file.read(1), byteorder='little')
+            current_frame = (current_frame & 4) | (3 - phase) % 3
+        return ""
+
+    def update_features(self):
+        if self.next_feat & end_encode:
+            if (self.next_feat & feature_mask) not in self.current_features:
+                pass
+            self.current_features[self.next_feat & feature_mask] -= 1
+            if self.current_features[self.next_feat & feature_mask] == 0:
+                del self.current_features[self.next_feat & feature_mask]
+        else:
+            if (self.next_feat & feature_mask) not in self.current_features:
+                self.current_features[self.next_feat & feature_mask] = 0
+            self.current_features[self.next_feat & feature_mask] += 1
+        info = self.get_feature_info()
+        if info:
+            self.current_info = info
+            self.prev_info_pos = self.next_pos
+        self.next_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False)
+        self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
+
+    def __init__(self):
+        global ch_initial, pos_initial, pos_percent
+
+        self.ch = ch_initial
+        ch_path = os.path.join(path, self.ch + ".bin")
+        self.file = open(ch_path, 'rb')
+        ch_size = self.file.read(4)
+        self.ch_size = int.from_bytes(ch_size, byteorder='little', signed=False)
+
+        self.pos = pos_initial
+        if pos_percent:
+            self.pos = (self.pos * self.ch_size) // 100
+        if pos_initial <= 0:
+            self.pos = self.ch_size + self.pos
+        self.file.seek(4 + (self.pos-1)//4)
+
+        mt_path = os.path.join(path, self.ch + ".dat")
+        self.mt_file = open(mt_path, 'rb')
+        self.next_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False)
+        self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
+
+        self.current_features = {}
+        self.current_info = ""
+        self.prev_info_pos = None
+
+        while(self.pos > self.next_pos and self.next_pos > 0):
+            self.update_features()
+
+        self.byte = self.file.read(1)
+        self.n = (self.pos-1) % 4
+        if self.byte == b"":
+            self.eof = True
+        else:
+            self.eof = False
+
+    def read(self):
+        b = int.from_bytes(self.byte, byteorder='little')
+        return (b >> (2*(3-self.n))) & 3
+
+    def advance(self):
+        global scrw, scrh
+        self.n += 1
+        if self.n & 3 == 0:
+            self.byte = self.file.read(1)
+            self.n &= 3
+        self.pos += 1
+        if self.byte == b"":
+            self.eof = True
+        if self.pos == self.next_pos:
+            while self.pos == self.next_pos:
+                self.update_features()
+        if self.current_info and self.prev_info_pos and self.pos - self.prev_info_pos > scrw * scrh:
+            self.current_info = ""
+
+    def __del__(self):
+        pass
 
 def get_input(stdscr):
     global scrw, scrh, paused
@@ -101,11 +186,13 @@ def get_input(stdscr):
     elif key == ord('\n') or key == curses.KEY_ENTER or key == ord(' '):
         paused = not paused
 
+current_reader = None
+
 def print_status(stdscr):
-    global pos, size, current_info
-    status = "{} ({:.3f}%)".format(pos, pos*100/size)
-    if current_info:
-        status += " {} ({})".format(current_info, strand_decode[current_info_strand])
+    global current_reader
+    status = "{} ({:.3f}%)".format(current_reader.pos, current_reader.pos*100/current_reader.ch_size)
+    if current_reader.current_info:
+        status += " {} ({})".format(current_reader.current_info, strand_decode[current_info_strand])
 
     stdscr.addstr(0, 0, status)
 
@@ -149,13 +236,15 @@ def set_prev_pairs(number, pair, stdscr):
                 break
         stdscr.chgat(y, x, curses.color_pair(pair))
 
-def print_nucleotide(nucleotide, stdscr):
-    global current_feature, prev_nucleotide, highlight, current_frame
+def print_nucleotide(reader, stdscr):
+    global prev_nucleotide, highlight, current_frame
     pair = None
-    if feature_encode['gap'] in current_features:
+    nucleotide = reader.read()
+    features = reader.current_features
+    if feature_encode['gap'] in features:
         nucleotide = 4
         pair = PAIR_UNK
-    elif feature_encode['CDS'] in current_features:
+    elif feature_encode['CDS'] in features:
         if current_frame & 4:
             pair = PAIR_CDS2 + nucleotide
         else:
@@ -164,20 +253,20 @@ def print_nucleotide(nucleotide, stdscr):
         if current_frame & 3 == 3:
             current_frame ^= 4
             current_frame &= 4
-    elif feature_encode['tRNA'] in current_features:
+    elif feature_encode['tRNA'] in features:
         pair = PAIR_TRNA + nucleotide
-    elif feature_encode['rRNA'] in current_features:
+    elif feature_encode['rRNA'] in features:
         pair = PAIR_RRNA + nucleotide
-    elif feature_encode['miRNA'] in current_features:
+    elif feature_encode['miRNA'] in features:
         pair = PAIR_MIRNA + nucleotide
-    elif feature_encode['exon'] in current_features:
-        if feature_encode['gene'] in current_features:
+    elif feature_encode['exon'] in features:
+        if feature_encode['gene'] in features:
             pair = PAIR_UTR_GENE + nucleotide
-        elif feature_encode['pseudogene'] in current_features:
+        elif feature_encode['pseudogene'] in features:
             pair = PAIR_EXON_PSEUDO + nucleotide
         else:
             pair = PAIR_UNK
-    elif feature_encode['gene'] in current_features or feature_encode['pseudogene'] in current_features:
+    elif feature_encode['gene'] in features or feature_encode['pseudogene'] in features:
         pair = PAIR_INTRON + nucleotide
     else:
         pair = PAIR_NONE + nucleotide
@@ -341,42 +430,8 @@ def print_title(title, stdscr):
         next_line(stdscr)
     next_line(stdscr)
 
-def get_feature_info(feat, mt_file):
-    global current_info_strand, current_frame
-    if feat == feature_encode['gene']:
-        info = b""
-        current_info_strand = int.from_bytes(mt_file.read(1), byteorder='little')
-        byte = mt_file.read(1)
-        while byte != b"\0":
-            info += byte
-            byte = mt_file.read(1)
-        return info.decode()
-    if feat == feature_encode['CDS']:
-        phase = int.from_bytes(mt_file.read(1), byteorder='little')
-        current_frame = (current_frame & 4) | (3 - phase) % 3
-    return ""
-
-def update_features(mt_file):
-    global next_pos, next_feat, current_features, current_info, prev_info_pos
-    if next_feat & end_encode:
-        if (next_feat & feature_mask) not in current_features:
-            pass
-        current_features[next_feat & feature_mask] -= 1
-        if current_features[next_feat & feature_mask] == 0:
-            del current_features[next_feat & feature_mask]
-    else:
-        if (next_feat & feature_mask) not in current_features:
-            current_features[next_feat & feature_mask] = 0
-        current_features[next_feat & feature_mask] += 1
-    info = get_feature_info(next_feat, mt_file)
-    if info:
-        current_info = info
-        prev_info_pos = next_pos
-    next_pos = int.from_bytes(mt_file.read(4), byteorder='little', signed=False)
-    next_feat = int.from_bytes(mt_file.read(1), byteorder='little', signed=False)
-
 def main(stdscr):
-    global next_pos, next_feat, current_features, current_info , pos, size, pos_percent, scrw, scrh, paused
+    global paused, current_reader
     curses.start_color()
     curses.use_default_colors()
     stdscr.idlok(True)
@@ -388,46 +443,17 @@ def main(stdscr):
             curses.init_pair(pair + offset, foreground, background)
     curses.init_pair(PAIR_HIGHLIGHT, 0, other_colors[PAIR_HIGHLIGHT])
 
-    ch_path = os.path.join(path, current_ch + ".bin")
-    file = open(ch_path, 'rb')
-    size = file.read(4)
-    size = int.from_bytes(size, byteorder='little', signed=False)
+    current_reader = reader = Reader()
 
-    if pos_percent:
-        pos = (pos * size) // 100
-    if pos <= 0:
-        pos = size + pos
-    file.seek(4 + (pos-1)//4)
-
-    mt_path = os.path.join(path, current_ch + ".dat")
-    mt_file = open(mt_path, 'rb')
-    next_pos = int.from_bytes(mt_file.read(4), byteorder='little', signed=False)
-    next_feat = int.from_bytes(mt_file.read(1), byteorder='little', signed=False)
-
-    while(pos > next_pos and next_pos > 0):
-        update_features(mt_file)
-
-    byte = file.read(1)
-    start_n = (pos-1) % 4
-    while byte != b"":
-        byte = int.from_bytes(byte, byteorder='little')
-        for n in range(start_n, 4):
-            if pos == 1:
-                for N in range(0, 10):
-                    next_line(stdscr)
-                print_title(current_ch, stdscr)
-            if pos == size:
-                break
-            if pos == next_pos:
-                while pos == next_pos:
-                    update_features(mt_file)
-            if current_info and prev_info_pos and pos - prev_info_pos > scrw * scrh:
-                current_info = ""
-            pos += 1
-            nucleotide = (byte >> (2*(3-n))) & 3
-            print_nucleotide(nucleotide, stdscr)
-        byte = file.read(1)
-        start_n = 0
+    while not reader.eof:
+        if reader.pos == 1:
+            for N in range(0, 10):
+                next_line(stdscr)
+            print_title(reader.ch, stdscr)
+        if reader.pos == reader.ch_size:
+            break
+        print_nucleotide(reader, stdscr)
+        reader.advance()
     stdscr.getch()
 
 def index_closest(list, val):
@@ -516,21 +542,21 @@ def parse_config():
         get_config_color(other_colors, PAIR_HIGHLIGHT, section, 'highlight')
 
 def get_start_pos():
-    global current_ch, pos, pos_percent, paused
+    global ch_initial, pos_initial, pos_percent, paused
     match = None
     for arg in sys.argv[1:]:
         match = re.fullmatch(r'([1-9XY]|1\d|2[0-2]|mt)\s*(\.(-?\d+%?))?', arg)
         if match:
             break
     if match:
-        current_ch = match.group(1)
+        ch_initial = match.group(1)
         pos_str = match.group(3)
         if pos_str:
             if pos_str[-1] == '%':
                 pos_percent = True
-                pos = int(pos_str[:-1])
+                pos_initial = int(pos_str[:-1])
             else:
-                pos = int(pos_str)
+                pos_initial = int(pos_str)
             paused = True
 
 def parse_options():
