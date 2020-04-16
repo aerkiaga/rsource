@@ -466,14 +466,15 @@ def main(stdscr):
     while not reader.eof:
         if not paused:
             view.scroll_down(1)
-
-        time.sleep(0.1)
+            time.sleep(0.1)
         key = stdscr.getch()
         if key == curses.KEY_RESIZE:
             scrh, scrw = view.screen.getmaxyx()
             scrx, scry = 0, 0
         elif key == ord('\n') or key == curses.KEY_ENTER or key == ord(' '):
             paused = not paused
+        elif key == curses.KEY_DOWN:
+            view.scroll_down(1)
 
     stdscr.getch()
 
