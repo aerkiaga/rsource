@@ -24,9 +24,9 @@ feature_mask = 63
 end_encode = 128
 
 strand_decode = {
-    0 : '.',
     1 : '+',
-    2 : '-'
+    2 : '-',
+    3 : '.'
 }
 
 PAIR_UNK = 0
@@ -86,38 +86,82 @@ paused = False
 current_frame = 0
 
 class Reader:
+    def apply_feature(self, feat):
+        if feat & end_encode:
+            if (feat & feature_mask) not in self.current_features:
+                return #D
+            self.current_features[feat & feature_mask] -= 1
+            if self.current_features[feat & feature_mask] == 0:
+                del self.current_features[feat & feature_mask]
+        else:
+            if (feat & feature_mask) not in self.current_features:
+                self.current_features[feat & feature_mask] = 0
+            self.current_features[feat & feature_mask] += 1
+
     def get_feature_info(self):
         global current_info_strand, current_frame
         if self.next_feat == feature_encode['gene']:
             info = b""
+            self.mt_file.read(1)
             current_info_strand = int.from_bytes(self.mt_file.read(1), byteorder='little')
             byte = self.mt_file.read(1)
             while byte != b"\0":
                 info += byte
                 byte = self.mt_file.read(1)
+            self.mt_file.read(1)
             return info.decode()
         if self.next_feat == feature_encode['CDS']:
             phase = int.from_bytes(self.mt_file.read(1), byteorder='little')
             current_frame = (current_frame & 4) | (3 - phase) % 3
+            self.mt_file.read(1)
         return ""
 
     def update_features(self):
-        if self.next_feat & end_encode:
-            if (self.next_feat & feature_mask) not in self.current_features:
-                pass
-            self.current_features[self.next_feat & feature_mask] -= 1
-            if self.current_features[self.next_feat & feature_mask] == 0:
-                del self.current_features[self.next_feat & feature_mask]
-        else:
-            if (self.next_feat & feature_mask) not in self.current_features:
-                self.current_features[self.next_feat & feature_mask] = 0
-            self.current_features[self.next_feat & feature_mask] += 1
+        self.cur_feat_pos = self.next_pos
+        self.apply_feature(self.next_feat)
         info = self.get_feature_info()
         if info:
             self.current_info = info
             self.prev_info_pos = self.next_pos
         self.next_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False)
         self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
+
+    def unget_feature(self):
+        self.mt_file.seek(self.mt_file.tell() - 6)
+        cur_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
+        if cur_feat == feature_encode['gene']:
+            self.mt_file.seek(self.mt_file.tell() - 3)
+            while self.mt_file.read(1) != b'\0':
+                self.mt_file.seek(self.mt_file.tell() - 2)
+            self.mt_file.seek(self.mt_file.tell() - 1)
+        elif cur_feat == feature_encode['CDS']:
+            self.mt_file.seek(self.mt_file.tell() - 2)
+        return cur_feat
+
+    def update_features_backwards(self):
+        self.next_pos = self.cur_feat_pos
+        lost_feat = self.unget_feature()
+        self.apply_feature(lost_feat ^ end_encode)
+        self.unget_feature()
+        self.mt_file.seek(self.mt_file.tell() - 5)
+        self.cur_feat_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False)
+        self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
+        self.get_feature_info()
+        self.next_feat = lost_feat
+        self.mt_file.read(5)
+        pass
+
+    def get_byte(self):
+        self.byte = self.file.read(1)
+        if self.byte == b'':
+            self.eof = True
+        else:
+            self.eof = False
+
+    def seek_pos(self):
+        self.file.seek(4 + (self.pos-1)//4)
+        self.n = (self.pos-1) % 4
+        self.get_byte()
 
     def __init__(self):
         global ch_initial, pos_initial, pos_percent
@@ -133,7 +177,7 @@ class Reader:
             self.pos = (self.pos * self.ch_size) // 100
         if pos_initial <= 0:
             self.pos = self.ch_size + self.pos
-        self.file.seek(4 + (self.pos-1)//4)
+        self.seek_pos()
 
         mt_path = os.path.join(path, self.ch + ".dat")
         self.mt_file = open(mt_path, 'rb')
@@ -141,18 +185,12 @@ class Reader:
         self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
 
         self.current_features = {}
+        self.cur_feat_pos = None
         self.current_info = ""
         self.prev_info_pos = None
 
         while(self.pos >= self.next_pos and self.next_pos > 0):
             self.update_features()
-
-        self.byte = self.file.read(1)
-        self.n = (self.pos-1) % 4
-        if self.byte == b"":
-            self.eof = True
-        else:
-            self.eof = False
 
     def read(self):
         b = int.from_bytes(self.byte, byteorder='little')
@@ -162,16 +200,25 @@ class Reader:
         global scrw, scrh
         self.n += 1
         if self.n & 3 == 0:
-            self.byte = self.file.read(1)
+            self.get_byte()
             self.n &= 3
         self.pos += 1
-        if self.byte == b"":
-            self.eof = True
         if self.pos == self.next_pos:
             while self.pos == self.next_pos:
                 self.update_features()
         if self.current_info and self.prev_info_pos and self.pos - self.prev_info_pos > scrw * scrh:
             self.current_info = ""
+
+    def jump_to(self, P):
+        if P > self.pos:
+            while(P >= self.next_pos and self.next_pos > 0):
+                self.update_features()
+        if P < self.pos:
+            while(P < self.cur_feat_pos):
+                self.update_features_backwards()
+        self.pos = P
+        self.seek_pos()
+        pass
 
     def __del__(self):
         self.file.close()
@@ -181,9 +228,10 @@ class View:
     def __init__(self, reader, stdscr):
         self.reader = reader
         self.screen = stdscr
+        self.top_pos = self.reader.pos
 
     def print_status(self):
-        status = "{} ({:.3f}%)".format(self.reader.pos, self.reader.pos*100/self.reader.ch_size)
+        status = "{} ({:.3f}%)".format(self.top_pos, self.top_pos*100/self.reader.ch_size)
         if self.reader.current_info:
             status += " {} ({})".format(self.reader.current_info, strand_decode[current_info_strand])
 
@@ -213,6 +261,8 @@ class View:
             self.screen.addch(scry, scrx, char, curses.color_pair(pair))
             return self.next_char()
         except curses.error:
+            return False
+            #
             r = self.next_char()
             return r or self.print_char(char, pair)
 
@@ -425,23 +475,39 @@ class View:
 
     def fill(self):
         while not self.reader.eof:
-            if self.reader.pos == 1:
+            if False:#self.reader.pos == 1:
                 for N in range(0, 10):
                     self.next_line()
                 self.print_title(self.reader.ch)
-            if self.reader.pos == self.reader.ch_size:
-                break
-            if self.print_nucleotide():
+            full = self.print_nucleotide()
+            if full:
                 self.print_status()
-                break
             self.reader.advance()
+            if full:
+                break
 
     def scroll_down(self, n):
+        global scrw, scrh, scrx, scry
         while n > 0 and not self.reader.eof:
             self.screen.scroll()
+            self.top_pos += scrw-1
             self.fill()
             n -= 1
-            self.reader.advance()
+
+    def scroll_up(self, n):
+        global scrw, scrh, scrx, scry
+        self.reader.jump_to(self.top_pos - (scrw-1))
+        self.top_pos -= (scrw-1) * n
+        scrx = scry = 0
+        self.fill()
+
+    def resize(self, W, H):
+        global scrw, scrh, scrx, scry
+        self.reader.jump_to(self.top_pos)
+        scrx = scry = 0
+        scrw = W
+        scrh = H
+        self.fill()
 
     def __del__(self):
         pass
@@ -463,20 +529,23 @@ def main(stdscr):
     view = View(reader, stdscr)
     view.fill()
 
-    while not reader.eof:
+    exit = False
+    while not exit:
         if not paused:
             view.scroll_down(1)
             time.sleep(0.1)
         key = stdscr.getch()
         if key == curses.KEY_RESIZE:
-            scrh, scrw = view.screen.getmaxyx()
-            scrx, scry = 0, 0
+            H, W = view.screen.getmaxyx()
+            view.resize(W, H)
         elif key == ord('\n') or key == curses.KEY_ENTER or key == ord(' '):
             paused = not paused
         elif key == curses.KEY_DOWN:
             view.scroll_down(1)
-
-    stdscr.getch()
+        elif key == curses.KEY_UP:
+            view.scroll_up(1)
+        elif key == 27:
+            exit = True
 
 def index_closest(list, val):
     pos = bisect.bisect_left(list, val)
