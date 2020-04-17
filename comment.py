@@ -15,9 +15,9 @@ feature_encode = {
 end_encode = 128
 
 strand_encode = {
-    '.' : 0,
     '+' : 1,
-    '-' : 2
+    '-' : 2,
+    '.' : 3
 }
 
 script_path = os.path.realpath(__file__)
@@ -46,7 +46,8 @@ def get_feature_info(feat, fields):
             match = pattern_info_name.search(fields[8])
         if not match:
             return None
-        info = strand_encode[fields[6]].to_bytes(1, byteorder='little')
+        info = b'\0'
+        info += strand_encode[fields[6]].to_bytes(1, byteorder='little')
         info += match.group(1).encode()
         info += b'\0'
         return info
@@ -115,4 +116,5 @@ for ch in ch_files.keys():
         file.write(ch_arr_feat[ch][n].to_bytes(1, byteorder='little', signed=False))
         if ch_arr_info[ch][n]:
             file.write(ch_arr_info[ch][n])
+            file.write(ch_arr_feat[ch][n].to_bytes(1, byteorder='little', signed=False))
 print("Done!")

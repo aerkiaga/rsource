@@ -24,9 +24,9 @@ feature_mask = 63
 end_encode = 128
 
 strand_decode = {
-    0 : '.',
     1 : '+',
-    2 : '-'
+    2 : '-',
+    3 : '.'
 }
 
 PAIR_UNK = 0
@@ -68,8 +68,6 @@ other_colors = {
 script_path = os.path.realpath(__file__)
 path = os.path.dirname(script_path)
 
-scrx = 0
-scry = 0
 scrw = 80
 scrh = 25
 
@@ -77,63 +75,138 @@ highlight = {
     'cpg' : False
 }
 
-current_info_strand = 0
 ch_initial = "1"
 pos_initial = 1
 pos_percent = False
 prev_nucleotide = None
 paused = False
-current_frame = 0
 
 class Reader:
+    def apply_feature(self, feat):
+        if feat & end_encode:
+            if (feat & feature_mask) not in self.current_features:
+                return #D
+            self.current_features[feat & feature_mask] -= 1
+            if self.current_features[feat & feature_mask] == 0:
+                del self.current_features[feat & feature_mask]
+        else:
+            if (feat & feature_mask) not in self.current_features:
+                self.current_features[feat & feature_mask] = 0
+            self.current_features[feat & feature_mask] += 1
+
     def get_feature_info(self):
-        global current_info_strand, current_frame
         if self.next_feat == feature_encode['gene']:
             info = b""
-            current_info_strand = int.from_bytes(self.mt_file.read(1), byteorder='little')
+            self.mt_file.read(1)
+            strand = self.mt_file.read(1)
+            info += strand
             byte = self.mt_file.read(1)
             while byte != b"\0":
                 info += byte
                 byte = self.mt_file.read(1)
+            self.mt_file.read(1)
             return info.decode()
         if self.next_feat == feature_encode['CDS']:
             phase = int.from_bytes(self.mt_file.read(1), byteorder='little')
-            current_frame = (current_frame & 4) | (3 - phase) % 3
+            self.mt_file.read(1)
         return ""
 
     def update_features(self):
-        if self.next_feat & end_encode:
-            if (self.next_feat & feature_mask) not in self.current_features:
-                pass
-            self.current_features[self.next_feat & feature_mask] -= 1
-            if self.current_features[self.next_feat & feature_mask] == 0:
-                del self.current_features[self.next_feat & feature_mask]
-        else:
-            if (self.next_feat & feature_mask) not in self.current_features:
-                self.current_features[self.next_feat & feature_mask] = 0
-            self.current_features[self.next_feat & feature_mask] += 1
+        self.cur_feat_pos = self.next_pos
+        self.apply_feature(self.next_feat)
         info = self.get_feature_info()
         if info:
-            self.current_info = info
+            self.current_info_strand = ord(info[0])
+            self.current_info = info[1:]
             self.prev_info_pos = self.next_pos
         self.next_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False)
         self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
 
-    def __init__(self):
-        global ch_initial, pos_initial, pos_percent
+    def unget_feature(self):
+        #only seeks, no other side effect; returns type of feature it lands in
+        if self.mt_file.tell() < 10:
+            return None
+        self.mt_file.seek(self.mt_file.tell() - 6)
+        cur_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
+        if cur_feat == feature_encode['gene']:
+            self.mt_file.seek(self.mt_file.tell() - 3)
+            while self.mt_file.read(1) != b'\0':
+                self.mt_file.seek(self.mt_file.tell() - 2)
+            self.mt_file.seek(self.mt_file.tell() - 1)
+        elif cur_feat == feature_encode['CDS']:
+            self.mt_file.seek(self.mt_file.tell() - 2)
+        return cur_feat
 
-        self.ch = ch_initial
+    def update_features_backwards(self):
+        self.next_pos = self.cur_feat_pos
+        # we are after the new next-to-next's type
+        lost_feat = self.unget_feature() # new next (previous current)
+        self.apply_feature(lost_feat ^ end_encode)
+        # we are after the new next's type
+        exists = self.unget_feature() # new current
+        if exists is not None:
+            # we are after the new current's type
+            self.mt_file.seek(self.mt_file.tell() - 5)
+            # we are at the new current
+            self.cur_feat_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False) # position
+            self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False) # type (actually of the current one)
+            self.get_feature_info() # skip info with current type
+            # we are at the next
+            self.mt_file.read(5)
+            # we are after the new next's type
+        else:
+            # we are after the new next's type
+            self.cur_feat_pos = None
+        self.next_feat = lost_feat # new next (previous current)
+
+    def get_cds_phase(self):
+        saved_fpos = self.mt_file.tell()
+        if saved_fpos == self.cds_phase_cache['saved_fpos']:
+            start_phase = self.cds_phase_cache['start_phase']
+            start_pos = self.cds_phase_cache['start_pos']
+            relative_pos = self.pos - start_pos
+            r = (start_phase + relative_pos%3) | (((relative_pos // 3) & 1) << 2)
+        else:
+            prev_feat = self.unget_feature()
+            while prev_feat != feature_encode['CDS'] and prev_feat is not None:
+                prev_feat = self.unget_feature()
+            if prev_feat == feature_encode['CDS']:
+                self.cds_phase_cache['saved_fpos'] = saved_fpos
+                self.cds_phase_cache['start_phase'] = start_phase = (3 - int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)) % 3
+                self.mt_file.seek(self.mt_file.tell() - 6)
+                self.cds_phase_cache['start_pos'] = start_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False)
+                relative_pos = self.pos - start_pos
+                r = (start_phase + relative_pos%3) | (((relative_pos // 3) & 1) << 2)
+            else:
+                r = 0
+            self.mt_file.seek(saved_fpos)
+        return r
+
+    def get_byte(self):
+        self.byte = self.file.read(1)
+        if self.byte == b'':
+            self.eof = True
+        else:
+            self.eof = False
+
+    def seek_pos(self):
+        self.file.seek(4 + (self.pos-1)//4)
+        self.n = (self.pos-1) % 4
+        self.get_byte()
+
+    def __init__(self, ch, pos, pos_is_percent):
+        self.ch = ch
         ch_path = os.path.join(path, self.ch + ".bin")
         self.file = open(ch_path, 'rb')
         ch_size = self.file.read(4)
         self.ch_size = int.from_bytes(ch_size, byteorder='little', signed=False)
 
-        self.pos = pos_initial
-        if pos_percent:
+        self.pos = pos
+        if pos_is_percent:
             self.pos = (self.pos * self.ch_size) // 100
         if pos_initial <= 0:
             self.pos = self.ch_size + self.pos
-        self.file.seek(4 + (self.pos-1)//4)
+        self.seek_pos()
 
         mt_path = os.path.join(path, self.ch + ".dat")
         self.mt_file = open(mt_path, 'rb')
@@ -141,18 +214,18 @@ class Reader:
         self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
 
         self.current_features = {}
+        self.cur_feat_pos = None
         self.current_info = ""
         self.prev_info_pos = None
 
         while(self.pos >= self.next_pos and self.next_pos > 0):
             self.update_features()
 
-        self.byte = self.file.read(1)
-        self.n = (self.pos-1) % 4
-        if self.byte == b"":
-            self.eof = True
-        else:
-            self.eof = False
+        self.cds_phase_cache = {
+            'saved_fpos' : None,
+            'start_phase' : None,
+            'start_pos' : None
+        }
 
     def read(self):
         b = int.from_bytes(self.byte, byteorder='little')
@@ -162,16 +235,23 @@ class Reader:
         global scrw, scrh
         self.n += 1
         if self.n & 3 == 0:
-            self.byte = self.file.read(1)
+            self.get_byte()
             self.n &= 3
         self.pos += 1
-        if self.byte == b"":
-            self.eof = True
         if self.pos == self.next_pos:
             while self.pos == self.next_pos:
                 self.update_features()
-        if self.current_info and self.prev_info_pos and self.pos - self.prev_info_pos > scrw * scrh:
-            self.current_info = ""
+
+    def jump_to(self, P):
+        if P > self.pos:
+            while(P >= self.next_pos and self.next_pos > 0):
+                self.update_features()
+        if P < self.pos:
+            while(self.cur_feat_pos and P < self.cur_feat_pos):
+                self.update_features_backwards()
+        self.pos = P
+        self.seek_pos()
+        pass
 
     def __del__(self):
         self.file.close()
@@ -181,45 +261,20 @@ class View:
     def __init__(self, reader, stdscr):
         self.reader = reader
         self.screen = stdscr
+        self.top_pos = self.reader.pos
+        self.title_pos = 0
 
     def print_status(self):
-        status = "{} ({:.3f}%)".format(self.reader.pos, self.reader.pos*100/self.reader.ch_size)
+        status = "{} ({:.3f}%)".format(self.top_pos, self.top_pos*100/self.reader.ch_size)
         if self.reader.current_info:
-            status += " {} ({})".format(self.reader.current_info, strand_decode[current_info_strand])
+            status += " {} ({})".format(self.reader.current_info, strand_decode[self.reader.current_info_strand])
 
         self.screen.addstr(0, 0, status)
 
-    def next_line(self):
-        global scrx, scry, scrw, scrh, paused
-        scrx = 0
-        scry += 1
-        if scry >= scrh:
-            scry = scrh - 1
-            return True
-        else:
-            return False
-
-    def next_char(self):
-        global scrx, scry, scrw, scrh, pos, size
-        scrx += 1
-        if scrx >= scrw-1:
-            return self.next_line()
-        else:
-            return False
-
-    def print_char(self, char, pair):
-        global scrx, scry
-        try:
-            self.screen.addch(scry, scrx, char, curses.color_pair(pair))
-            return self.next_char()
-        except curses.error:
-            r = self.next_char()
-            return r or self.print_char(char, pair)
-
     def set_prev_pairs(self, number, pair):
-        global scrx, scry, scrw, scrh
-        x = scrx
-        y = scry
+        global scrw, scrh
+        x = self.fillx
+        y = self.filly
         for n in range(0, number):
             x -= 1
             if x < 0:
@@ -229,8 +284,8 @@ class View:
                     break
             self.screen.chgat(y, x, curses.color_pair(pair))
 
-    def print_nucleotide(self):
-        global prev_nucleotide, highlight, current_frame
+    def get_nucleotide_and_pair(self):
+        global prev_nucleotide, highlight
         pair = None
         nucleotide = self.reader.read()
         features = self.reader.current_features
@@ -238,14 +293,16 @@ class View:
             nucleotide = 4
             pair = PAIR_UNK
         elif feature_encode['CDS'] in features:
-            if current_frame & 4:
+            if self.current_cds_phase is None:
+                self.current_cds_phase = self.reader.get_cds_phase()
+            if self.current_cds_phase & 4:
                 pair = PAIR_CDS2 + nucleotide
             else:
                 pair = PAIR_CDS + nucleotide
-            current_frame += 1
-            if current_frame & 3 == 3:
-                current_frame ^= 4
-                current_frame &= 4
+            self.current_cds_phase += 1
+            if self.current_cds_phase & 3 == 3:
+                self.current_cds_phase ^= 4
+                self.current_cds_phase &= 4
         elif feature_encode['tRNA'] in features:
             pair = PAIR_TRNA + nucleotide
         elif feature_encode['rRNA'] in features:
@@ -267,9 +324,9 @@ class View:
             pair = PAIR_HIGHLIGHT
             self.set_prev_pairs(1, PAIR_HIGHLIGHT)
         prev_nucleotide = nucleotide
-        return self.print_char(nucleotide_decoding[nucleotide], pair)
+        return (nucleotide, pair)
 
-    def print_title(self, title):
+    def print_title_line(self, title, line):
           #####      ##    #######   #######  ##        ########  #######  ########  #######   #######  ##     ## ##    ##
          ##   ##   ####   ##     ## ##     ## ##    ##  ##       ##     ## ##    ## ##     ## ##     ##  ##   ##   ##  ##                ##
         ##     ##    ##          ##        ## ##    ##  ##       ##            ##   ##     ## ##     ##   ## ##     ####   ## ##  ##  ########
@@ -407,47 +464,130 @@ class View:
                 "    #### ",
             ],
         }
-        length = 0
-        for C in title:
-            length += len(chars[C][0])
-        self.next_line()
-        pad = (scrw - length)//2
-        if pad < 0:
-            pad = 0
-        for n in range(0, len(chars['0'])):
+        height = len(chars['0'])
+        n = height + line + 1
+        if n >= 0 and n < height:
+            length = 0
+            for C in title:
+                length += len(chars[C][0])
+            pad = (scrw - length)//2
+            if pad < 0:
+                pad = 0
             for m in range(0, pad):
                 self.print_char(" ", PAIR_UNK)
+                self.fillx += 1
             for C in title:
                 for c in chars[C][n]:
                     self.print_char(c, PAIR_UNK)
-            self.next_line()
-        self.next_line()
+                    self.fillx += 1
+            while self.fillx < scrw-1:
+                self.print_char(" ", PAIR_UNK)
+                self.fillx += 1
+        else:
+            for m in range(0, scrw-1):
+                self.print_char(" ", PAIR_UNK)
+                self.fillx += 1
 
-    def fill(self):
-        while not self.reader.eof:
-            if self.reader.pos == 1:
-                for N in range(0, 10):
-                    self.next_line()
-                self.print_title(self.reader.ch)
-            if self.reader.pos == self.reader.ch_size:
-                break
-            if self.print_nucleotide():
-                self.print_status()
-                break
-            self.reader.advance()
+    def next_line(self):
+        self.fillx = 0
+        self.filly += 1
+        if self.filly >= self.fillmaxy:
+            self.filly = 0
+            return True
+        else:
+            return False
+
+    def next_char(self):
+        global scrw
+        self.fillx += 1
+        if self.fillx >= scrw-1:
+            return self.next_line()
+        else:
+            return False
+
+    def print_char(self, char, pair):
+        try:
+            self.screen.addch(self.filly, self.fillx, char, curses.color_pair(pair))
+        except curses.error:
+            return False
+
+    def fill(self, x, y, h, pos=None):
+        global scrw
+        self.fillx, self.filly = x, y
+        self.fillmaxy = self.filly + h
+        self.current_cds_phase = None
+        if pos is None:
+            pos = self.top_pos
+
+        reading = False
+        while self.filly < self.fillmaxy:
+            self.fillx = 0
+            if self.title_pos < 0 and self.filly < -self.title_pos:
+                self.print_title_line(self.reader.ch, self.title_pos + self.filly)
+                pos += scrw-1
+            else:
+                while self.fillx < scrw-1:
+                    if not reading:
+                        if pos < 1:
+                            self.print_char(' ', 0)
+                            pos += 1
+                        else:
+                            self.reader.jump_to(max(pos, 1))
+                            reading = True
+                    if self.reader.eof:
+                        self.print_char(' ', 0)
+                    elif reading:
+                        nucleotide, pair = self.get_nucleotide_and_pair()
+                        self.print_char(nucleotide_decoding[nucleotide], pair)
+                        self.reader.advance()
+                    self.fillx += 1
+            self.filly += 1
+        self.print_status()
 
     def scroll_down(self, n):
+        global scrw, scrh
         while n > 0 and not self.reader.eof:
-            self.screen.scroll()
-            self.fill()
+            self.screen.scroll(1)
+            if self.title_pos < 0:
+                self.title_pos += 1
+            self.top_pos += scrw-1
+            self.fill(x=0, y=scrh-1, h=1, pos=self.top_pos + (scrw-1)*(scrh-1))
             n -= 1
-            self.reader.advance()
+        if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos < self.top_pos:
+            self.reader.current_info = ""
+
+    def scroll_up(self, n):
+        global scrw, scrh
+        while n > 0 and self.title_pos >= -10:
+            self.screen.scroll(-1)
+            if self.top_pos <= 1:
+                if self.title_pos == 0:
+                    self.fill(x=0, y=1, h=1)
+                    self.title_pos = -1
+                else:
+                    self.title_pos -= 1
+            self.top_pos -= scrw-1
+            self.fill(x=0, y=0, h=2)
+            n -= 1
+        if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos > self.top_pos + (scrw-1)*scrh:
+            self.reader.current_info = ""
+
+    def resize(self, W, H):
+        global scrw, scrh
+        self.screen.clear()
+        if self.top_pos < 1:
+            start_gap = 1 - (self.top_pos - self.title_pos*(scrw-1))
+            lost_start_gaps = start_gap // (W-1)
+            self.top_pos = 1 - start_gap + (self.title_pos+lost_start_gaps)*(W-1)
+        scrw = W
+        scrh = H
+        self.fill(x=0, y=0, h=scrh)
 
     def __del__(self):
         pass
 
 def main(stdscr):
-    global paused, current_reader, scrw, scrh
+    global paused, current_reader, scrw, scrh, ch_initial, pos_initial, pos_percent
     curses.start_color()
     curses.use_default_colors()
     stdscr.idlok(True)
@@ -459,24 +599,30 @@ def main(stdscr):
             curses.init_pair(pair + offset, foreground, background)
     curses.init_pair(PAIR_HIGHLIGHT, 0, other_colors[PAIR_HIGHLIGHT])
 
-    reader = Reader()
+    reader = Reader(ch_initial, pos_initial, pos_percent)
     view = View(reader, stdscr)
-    view.fill()
+    view.fill(x=0, y=0, h=scrh)
 
-    while not reader.eof:
+    exit = False
+    while not exit:
         if not paused:
             view.scroll_down(1)
             time.sleep(0.1)
         key = stdscr.getch()
+        if not paused:
+            while key in [curses.KEY_DOWN, curses.KEY_UP]:
+                key = stdscr.getch()
         if key == curses.KEY_RESIZE:
-            scrh, scrw = view.screen.getmaxyx()
-            scrx, scry = 0, 0
+            H, W = view.screen.getmaxyx()
+            view.resize(W, H)
         elif key == ord('\n') or key == curses.KEY_ENTER or key == ord(' '):
             paused = not paused
         elif key == curses.KEY_DOWN:
             view.scroll_down(1)
-
-    stdscr.getch()
+        elif key == curses.KEY_UP:
+            view.scroll_up(1)
+        elif key == 27:
+            exit = True
 
 def index_closest(list, val):
     pos = bisect.bisect_left(list, val)
