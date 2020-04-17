@@ -77,7 +77,6 @@ highlight = {
     'cpg' : False
 }
 
-current_info_strand = 0
 ch_initial = "1"
 pos_initial = 1
 pos_percent = False
@@ -98,12 +97,11 @@ class Reader:
             self.current_features[feat & feature_mask] += 1
 
     def get_feature_info(self):
-        #TODO: remove global variable side effects
-        global current_info_strand, current_frame
         if self.next_feat == feature_encode['gene']:
             info = b""
             self.mt_file.read(1)
-            current_info_strand = int.from_bytes(self.mt_file.read(1), byteorder='little')
+            strand = self.mt_file.read(1)
+            info += strand
             byte = self.mt_file.read(1)
             while byte != b"\0":
                 info += byte
@@ -120,7 +118,8 @@ class Reader:
         self.apply_feature(self.next_feat)
         info = self.get_feature_info()
         if info:
-            self.current_info = info
+            self.current_info_strand = ord(info[0])
+            self.current_info = info[1:]
             self.prev_info_pos = self.next_pos
         self.next_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False)
         self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
@@ -271,7 +270,7 @@ class View:
     def print_status(self):
         status = "{} ({:.3f}%)".format(self.top_pos, self.top_pos*100/self.reader.ch_size)
         if self.reader.current_info:
-            status += " {} ({})".format(self.reader.current_info, strand_decode[current_info_strand])
+            status += " {} ({})".format(self.reader.current_info, strand_decode[self.reader.current_info_strand])
 
         self.screen.addstr(0, 0, status)
 
