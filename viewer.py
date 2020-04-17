@@ -510,8 +510,8 @@ class View:
         self.fillx, self.filly = x, y
         self.fillmaxy = self.filly + h
         self.current_cds_phase = None
-        if self.title_pos < 0 and scry < -self.title_pos:
-            self.print_title_line(self.reader.ch, self.title_pos + scry)
+        if self.title_pos < 0 and self.filly < -self.title_pos:
+            self.print_title_line(self.reader.ch, self.title_pos + self.filly)
             return
         while not self.reader.eof:
             nucleotide, pair = self.get_nucleotide_and_pair()
