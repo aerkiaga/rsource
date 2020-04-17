@@ -217,8 +217,6 @@ class Reader:
         if self.pos == self.next_pos:
             while self.pos == self.next_pos:
                 self.update_features()
-        if self.current_info and self.prev_info_pos and self.pos - self.prev_info_pos > scrw * scrh:
-            self.current_info = ""
 
     def jump_to(self, P):
         if P > self.pos:
@@ -506,6 +504,8 @@ class View:
             scrx = 0
             self.fill()
             n -= 1
+        if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos < self.top_pos:
+            self.reader.current_info = ""
 
     def scroll_up(self, n):
         global scrw, scrh, scrx, scry
@@ -519,6 +519,8 @@ class View:
             self.fill()
             scrh = tmp
             n -= 1
+        if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos > self.top_pos + (scrw-1)*scrh:
+            self.reader.current_info = ""
 
     def resize(self, W, H):
         global scrw, scrh, scrx, scry
