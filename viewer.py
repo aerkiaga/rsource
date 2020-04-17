@@ -534,7 +534,9 @@ class View:
                         else:
                             self.reader.jump_to(max(pos, 1))
                             reading = True
-                    if reading:
+                    if self.reader.eof:
+                        self.print_char(' ', 0)
+                    elif reading:
                         nucleotide, pair = self.get_nucleotide_and_pair()
                         self.print_char(nucleotide_decoding[nucleotide], pair)
                         self.reader.advance()
