@@ -556,6 +556,9 @@ def main(stdscr):
             view.scroll_down(1)
             time.sleep(0.1)
         key = stdscr.getch()
+        if not paused:
+            while key in [curses.KEY_DOWN, curses.KEY_UP]:
+                key = stdscr.getch()
         if key == curses.KEY_RESIZE:
             H, W = view.screen.getmaxyx()
             view.resize(W, H)
