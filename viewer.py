@@ -83,7 +83,6 @@ pos_initial = 1
 pos_percent = False
 prev_nucleotide = None
 paused = False
-current_frame = 0
 
 class Reader:
     def apply_feature(self, feat):
@@ -99,6 +98,7 @@ class Reader:
             self.current_features[feat & feature_mask] += 1
 
     def get_feature_info(self):
+        #TODO: remove global variable side effects
         global current_info_strand, current_frame
         if self.next_feat == feature_encode['gene']:
             info = b""
@@ -112,7 +112,6 @@ class Reader:
             return info.decode()
         if self.next_feat == feature_encode['CDS']:
             phase = int.from_bytes(self.mt_file.read(1), byteorder='little')
-            current_frame = (current_frame & 4) | (3 - phase) % 3
             self.mt_file.read(1)
         return ""
 
@@ -127,6 +126,7 @@ class Reader:
         self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
 
     def unget_feature(self):
+        #only seeks, no other side effect; returns type of feature it lands in
         if self.mt_file.tell() < 10:
             return None
         self.mt_file.seek(self.mt_file.tell() - 6)
@@ -161,6 +161,29 @@ class Reader:
             # we are after the new next's type
             self.cur_feat_pos = None
         self.next_feat = lost_feat # new next (previous current)
+
+    def get_cds_phase(self):
+        saved_fpos = self.mt_file.tell()
+        if saved_fpos == self.cds_phase_cache['saved_fpos']:
+            start_phase = self.cds_phase_cache['start_phase']
+            start_pos = self.cds_phase_cache['start_pos']
+            relative_pos = self.pos - start_pos
+            r = (start_phase + relative_pos%3) | (((relative_pos // 3) & 1) << 2)
+        else:
+            prev_feat = self.unget_feature()
+            while prev_feat != feature_encode['CDS'] and prev_feat is not None:
+                prev_feat = self.unget_feature()
+            if prev_feat == feature_encode['CDS']:
+                self.cds_phase_cache['saved_fpos'] = saved_fpos
+                self.cds_phase_cache['start_phase'] = start_phase = (3 - int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)) % 3
+                self.mt_file.seek(self.mt_file.tell() - 6)
+                self.cds_phase_cache['start_pos'] = start_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False)
+                relative_pos = self.pos - start_pos
+                r = (start_phase + relative_pos%3) | (((relative_pos // 3) & 1) << 2)
+            else:
+                r = 0
+            self.mt_file.seek(saved_fpos)
+        return r
 
     def get_byte(self):
         self.byte = self.file.read(1)
@@ -202,6 +225,12 @@ class Reader:
 
         while(self.pos >= self.next_pos and self.next_pos > 0):
             self.update_features()
+
+        self.cds_phase_cache = {
+            'saved_fpos' : None,
+            'start_phase' : None,
+            'start_pos' : None
+        }
 
     def read(self):
         b = int.from_bytes(self.byte, byteorder='little')
@@ -289,7 +318,7 @@ class View:
             self.screen.chgat(y, x, curses.color_pair(pair))
 
     def print_nucleotide(self):
-        global prev_nucleotide, highlight, current_frame
+        global prev_nucleotide, highlight
         pair = None
         nucleotide = self.reader.read()
         features = self.reader.current_features
@@ -297,14 +326,16 @@ class View:
             nucleotide = 4
             pair = PAIR_UNK
         elif feature_encode['CDS'] in features:
-            if current_frame & 4:
+            if self.current_cds_phase is None:
+                self.current_cds_phase = self.reader.get_cds_phase()
+            if self.current_cds_phase & 4:
                 pair = PAIR_CDS2 + nucleotide
             else:
                 pair = PAIR_CDS + nucleotide
-            current_frame += 1
-            if current_frame & 3 == 3:
-                current_frame ^= 4
-                current_frame &= 4
+            self.current_cds_phase += 1
+            if self.current_cds_phase & 3 == 3:
+                self.current_cds_phase ^= 4
+                self.current_cds_phase &= 4
         elif feature_encode['tRNA'] in features:
             pair = PAIR_TRNA + nucleotide
         elif feature_encode['rRNA'] in features:
@@ -483,6 +514,7 @@ class View:
         self.next_line()
 
     def fill(self):
+        self.current_cds_phase = None
         while not self.reader.eof:
             if False:#self.reader.pos == 1:
                 for N in range(0, 10):
