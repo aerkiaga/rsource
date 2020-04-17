@@ -68,8 +68,6 @@ other_colors = {
 script_path = os.path.realpath(__file__)
 path = os.path.dirname(script_path)
 
-scrx = 0
-scry = 0
 scrw = 80
 scrh = 25
 
@@ -273,39 +271,10 @@ class View:
 
         self.screen.addstr(0, 0, status)
 
-    def next_line(self):
-        global scrx, scry, scrw, scrh, paused
-        scrx = 0
-        scry += 1
-        if scry >= scrh:
-            scry = 0
-            return True
-        else:
-            return False
-
-    def next_char(self):
-        global scrx, scry, scrw, scrh, pos, size
-        scrx += 1
-        if scrx >= scrw-1:
-            return self.next_line()
-        else:
-            return False
-
-    def print_char(self, char, pair):
-        global scrx, scry
-        try:
-            self.screen.addch(scry, scrx, char, curses.color_pair(pair))
-            return self.next_char()
-        except curses.error:
-            return False
-            #
-            r = self.next_char()
-            return r or self.print_char(char, pair)
-
     def set_prev_pairs(self, number, pair):
-        global scrx, scry, scrw, scrh
-        x = scrx
-        y = scry
+        global scrw, scrh
+        x = self.fillx
+        y = self.filly
         for n in range(0, number):
             x -= 1
             if x < 0:
@@ -315,7 +284,7 @@ class View:
                     break
             self.screen.chgat(y, x, curses.color_pair(pair))
 
-    def print_nucleotide(self):
+    def get_nucleotide_and_pair(self):
         global prev_nucleotide, highlight
         pair = None
         nucleotide = self.reader.read()
@@ -355,7 +324,7 @@ class View:
             pair = PAIR_HIGHLIGHT
             self.set_prev_pairs(1, PAIR_HIGHLIGHT)
         prev_nucleotide = nucleotide
-        return self.print_char(nucleotide_decoding[nucleotide], pair)
+        return (nucleotide, pair)
 
     def print_title_line(self, title, line):
           #####      ##    #######   #######  ##        ########  #######  ########  #######   #######  ##     ## ##    ##
@@ -513,21 +482,47 @@ class View:
             for m in range(0, scrw):
                 self.print_char(" ", PAIR_UNK)
 
-    def fill(self):
-        global scry
+    def next_line(self):
+        self.fillx = 0
+        self.filly += 1
+        if self.filly >= self.fillmaxy:
+            self.filly = 0
+            return True
+        else:
+            return False
+
+    def next_char(self):
+        global scrw
+        self.fillx += 1
+        if self.fillx >= scrw-1:
+            return self.next_line()
+        else:
+            return False
+
+    def print_char(self, char, pair):
+        try:
+            self.screen.addch(self.filly, self.fillx, char, curses.color_pair(pair))
+            return self.next_char()
+        except curses.error:
+            return False
+
+    def fill(self, x, y, h):
+        self.fillx, self.filly = x, y
+        self.fillmaxy = self.filly + h
         self.current_cds_phase = None
         if self.title_pos < 0 and scry < -self.title_pos:
             self.print_title_line(self.reader.ch, self.title_pos + scry)
             return
         while not self.reader.eof:
-            full = self.print_nucleotide()
+            nucleotide, pair = self.get_nucleotide_and_pair()
+            full = self.print_char(nucleotide_decoding[nucleotide], pair)
             self.reader.advance()
             if full:
                 break
         self.print_status()
 
     def scroll_down(self, n):
-        global scrw, scrh, scrx, scry
+        global scrw, scrh
         while n > 0 and not self.reader.eof:
             self.screen.scroll(1)
             if self.title_pos < 0:
@@ -538,31 +533,24 @@ class View:
                 title = True
             self.reader.jump_to(max(self.top_pos + (scrw-1)*scrh, 1))
             self.top_pos += scrw-1
-            scry = scrh-1
             if self.top_pos + (scrw-1)*scrh < 1 and not title:
-                scrx = 1 - self.top_pos
+                fx = 1 - self.top_pos
             else:
-                scrx = 0
-            self.fill()
+                fx = 0
+            self.fill(x=fx, y=scrh-1, h=1)
             n -= 1
         if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos < self.top_pos:
             self.reader.current_info = ""
 
     def scroll_up(self, n):
-        global scrw, scrh, scrx, scry
+        global scrw, scrh
         while n > 0 and self.title_pos >= -10:
             self.screen.scroll(-1)
-            tmp = scrh
             if self.top_pos <= 1:
                 title = True
                 if self.title_pos == 0:
                     self.reader.jump_to(max(self.top_pos, 1))
-                    scrh = 1
-                    scry = 1
-                    scrx = 0
-                    while scrx < 1 - self.top_pos:
-                        self.print_char(' ', 0)
-                    self.fill()
+                    self.fill(x=0, y=1, h=1)
                     self.title_pos = -1
                 else:
                     self.title_pos -= 1
@@ -571,25 +559,21 @@ class View:
             self.top_pos -= scrw-1
             if not title:
                 self.reader.jump_to(max(self.top_pos, 1))
-            scrh = 2
-            scry = 0
             if self.top_pos < 1 and not title:
-                scrx = 1 - self.top_pos
+                fx = 1 - self.top_pos
             else:
-                scrx = 0
-            self.fill()
-            scrh = tmp
+                fx = 0
+            self.fill(x=fx, y=0, h=2)
             n -= 1
         if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos > self.top_pos + (scrw-1)*scrh:
             self.reader.current_info = ""
 
     def resize(self, W, H):
-        global scrw, scrh, scrx, scry
+        global scrw, scrh
         self.reader.jump_to(max(self.top_pos, 1))
-        scrx = scry = 0
         scrw = W
         scrh = H
-        self.fill()
+        self.fill(x=0, y=0, h=scrh)
 
     def __del__(self):
         pass
@@ -609,7 +593,7 @@ def main(stdscr):
 
     reader = Reader(ch_initial, pos_initial, pos_percent)
     view = View(reader, stdscr)
-    view.fill()
+    view.fill(x=0, y=0, h=scrh)
 
     exit = False
     while not exit:
