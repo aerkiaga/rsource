@@ -194,17 +194,15 @@ class Reader:
         self.n = (self.pos-1) % 4
         self.get_byte()
 
-    def __init__(self):
-        global ch_initial, pos_initial, pos_percent
-
-        self.ch = ch_initial
+    def __init__(self, ch, pos, pos_is_percent):
+        self.ch = ch
         ch_path = os.path.join(path, self.ch + ".bin")
         self.file = open(ch_path, 'rb')
         ch_size = self.file.read(4)
         self.ch_size = int.from_bytes(ch_size, byteorder='little', signed=False)
 
-        self.pos = pos_initial
-        if pos_percent:
+        self.pos = pos
+        if pos_is_percent:
             self.pos = (self.pos * self.ch_size) // 100
         if pos_initial <= 0:
             self.pos = self.ch_size + self.pos
@@ -264,6 +262,7 @@ class View:
         self.reader = reader
         self.screen = stdscr
         self.top_pos = self.reader.pos
+        self.title_pos = 0
 
     def print_status(self):
         status = "{} ({:.3f}%)".format(self.top_pos, self.top_pos*100/self.reader.ch_size)
@@ -327,7 +326,7 @@ class View:
         prev_nucleotide = nucleotide
         return (nucleotide, pair)
 
-    def print_title(self, title):
+    def print_title_line(self, title, line):
           #####      ##    #######   #######  ##        ########  #######  ########  #######   #######  ##     ## ##    ##
          ##   ##   ####   ##     ## ##     ## ##    ##  ##       ##     ## ##    ## ##     ## ##     ##  ##   ##   ##  ##                ##
         ##     ##    ##          ##        ## ##    ##  ##       ##            ##   ##     ## ##     ##   ## ##     ####   ## ##  ##  ########
@@ -465,21 +464,23 @@ class View:
                 "    #### ",
             ],
         }
-        length = 0
-        for C in title:
-            length += len(chars[C][0])
-        self.next_line()
-        pad = (scrw - length)//2
-        if pad < 0:
-            pad = 0
-        for n in range(0, len(chars['0'])):
+        height = len(chars['0'])
+        n = height + line + 1
+        if n >= 0 and n < height:
+            length = 0
+            for C in title:
+                length += len(chars[C][0])
+            pad = (scrw - length)//2
+            if pad < 0:
+                pad = 0
             for m in range(0, pad):
                 self.print_char(" ", PAIR_UNK)
             for C in title:
                 for c in chars[C][n]:
                     self.print_char(c, PAIR_UNK)
-            self.next_line()
-        self.next_line()
+        else:
+            for m in range(0, scrw):
+                self.print_char(" ", PAIR_UNK)
 
     def next_line(self):
         self.fillx = 0
@@ -509,11 +510,10 @@ class View:
         self.fillx, self.filly = x, y
         self.fillmaxy = self.filly + h
         self.current_cds_phase = None
+        if self.title_pos < 0 and scry < -self.title_pos:
+            self.print_title_line(self.reader.ch, self.title_pos + scry)
+            return
         while not self.reader.eof:
-            if False:#self.reader.pos == 1:
-                for N in range(0, 10):
-                    self.next_line()
-                self.print_title(self.reader.ch)
             nucleotide, pair = self.get_nucleotide_and_pair()
             full = self.print_char(nucleotide_decoding[nucleotide], pair)
             self.reader.advance()
@@ -525,27 +525,52 @@ class View:
         global scrw, scrh
         while n > 0 and not self.reader.eof:
             self.screen.scroll(1)
-            self.reader.jump_to(self.top_pos + (scrw-1)*scrh)
+            if self.title_pos < 0:
+                self.title_pos += 1
+            if self.top_pos + (scrw-1)*(scrh+1) > 1:
+                title = False
+            else:
+                title = True
+            self.reader.jump_to(max(self.top_pos + (scrw-1)*scrh, 1))
             self.top_pos += scrw-1
-            self.fill(x=0, y=scrh-1, h=1)
+            if self.top_pos + (scrw-1)*scrh < 1 and not title:
+                fx = 1 - self.top_pos
+            else:
+                fx = 0
+            self.fill(x=fx, y=scrh-1, h=1)
             n -= 1
         if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos < self.top_pos:
             self.reader.current_info = ""
 
     def scroll_up(self, n):
         global scrw, scrh
-        while n > 0 and self.top_pos - (scrw-1) >= 1:
+        while n > 0 and self.title_pos >= -10:
             self.screen.scroll(-1)
+            if self.top_pos <= 1:
+                title = True
+                if self.title_pos == 0:
+                    self.reader.jump_to(max(self.top_pos, 1))
+                    self.fill(x=0, y=1, h=1)
+                    self.title_pos = -1
+                else:
+                    self.title_pos -= 1
+            else:
+                title = False
             self.top_pos -= scrw-1
-            self.reader.jump_to(self.top_pos)
-            self.fill(x=0, y=0, h=2)
+            if not title:
+                self.reader.jump_to(max(self.top_pos, 1))
+            if self.top_pos < 1 and not title:
+                fx = 1 - self.top_pos
+            else:
+                fx = 0
+            self.fill(x=fx, y=0, h=2)
             n -= 1
         if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos > self.top_pos + (scrw-1)*scrh:
             self.reader.current_info = ""
 
     def resize(self, W, H):
         global scrw, scrh
-        self.reader.jump_to(self.top_pos)
+        self.reader.jump_to(max(self.top_pos, 1))
         scrw = W
         scrh = H
         self.fill(x=0, y=0, h=scrh)
@@ -554,7 +579,7 @@ class View:
         pass
 
 def main(stdscr):
-    global paused, current_reader, scrw, scrh
+    global paused, current_reader, scrw, scrh, ch_initial, pos_initial, pos_percent
     curses.start_color()
     curses.use_default_colors()
     stdscr.idlok(True)
@@ -566,7 +591,7 @@ def main(stdscr):
             curses.init_pair(pair + offset, foreground, background)
     curses.init_pair(PAIR_HIGHLIGHT, 0, other_colors[PAIR_HIGHLIGHT])
 
-    reader = Reader()
+    reader = Reader(ch_initial, pos_initial, pos_percent)
     view = View(reader, stdscr)
     view.fill(x=0, y=0, h=scrh)
 
