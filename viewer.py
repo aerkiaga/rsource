@@ -2,6 +2,12 @@
 
 import os, sys, curses, time, configparser, re, bisect, shutil
 
+chromosomes = [
+    '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
+    '11', '12', '13', '14', '15', '16', '17', '18', '19',
+    '20', '21', '22', 'X', 'Y', 'mt'
+]
+
 nucleotide_decoding = {
     0 : 'A',
     1 : 'C',
@@ -119,8 +125,13 @@ class Reader:
             self.current_info_strand = ord(info[0])
             self.current_info = info[1:]
             self.prev_info_pos = self.next_pos
-        self.next_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False)
-        self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
+        dword = self.mt_file.read(4)
+        if dword == b"":
+            self.next_pos = None
+            self.next_feat = None
+        else:
+            self.next_pos = int.from_bytes(dword, byteorder='little', signed=False)
+            self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
 
     def unget_feature(self):
         #only seeks, no other side effect; returns type of feature it lands in
@@ -139,8 +150,13 @@ class Reader:
 
     def update_features_backwards(self):
         self.next_pos = self.cur_feat_pos
-        # we are after the new next-to-next's type
-        lost_feat = self.unget_feature() # new next (previous current)
+        if self.next_feat is None:
+            # we are at the end-of-file, after the new next's type
+            self.mt_file.seek(self.mt_file.tell() - 1)
+            lost_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False) # new next (previous current)
+        else:
+            # we are after the new next-to-next's type
+            lost_feat = self.unget_feature() # new next (previous current)
         self.apply_feature(lost_feat ^ end_encode)
         # we are after the new next's type
         exists = self.unget_feature() # new current
@@ -205,7 +221,7 @@ class Reader:
         if pos_is_percent:
             self.pos = (self.pos * self.ch_size) // 100
         if pos_initial <= 0:
-            self.pos = self.ch_size + self.pos
+            self.pos = self.ch_size + self.pos + 1
         self.seek_pos()
 
         mt_path = os.path.join(path, self.ch + ".dat")
@@ -218,7 +234,7 @@ class Reader:
         self.current_info = ""
         self.prev_info_pos = None
 
-        while(self.pos >= self.next_pos and self.next_pos > 0):
+        while(self.next_pos and self.pos >= self.next_pos):
             self.update_features()
 
         self.cds_phase_cache = {
@@ -241,10 +257,12 @@ class Reader:
         if self.pos == self.next_pos:
             while self.pos == self.next_pos:
                 self.update_features()
+        if self.pos > self.ch_size:
+            self.eof = True
 
     def jump_to(self, P):
         if P > self.pos:
-            while(P >= self.next_pos and self.next_pos > 0):
+            while(self.next_pos and P >= self.next_pos):
                 self.update_features()
         if P < self.pos:
             while(self.cur_feat_pos and P < self.cur_feat_pos):
@@ -260,6 +278,7 @@ class Reader:
 class View:
     def __init__(self, reader, stdscr):
         self.reader = reader
+        self.next_reader = None
         self.screen = stdscr
         self.top_pos = self.reader.pos
         self.title_pos = 0
@@ -544,6 +563,17 @@ class View:
             self.filly += 1
         self.print_status()
 
+    def prev_chromosome(self):
+        global scrw
+        index = chromosomes.index(self.reader.ch)
+        if index == 0:
+            return
+        self.next_reader = self.reader
+        ch = chromosomes[index-1]
+        self.reader = Reader(ch, 0, False)
+        self.top_pos = self.reader.ch_size - self.reader.ch_size%(scrw-1)
+        self.title_pos = 0
+
     def scroll_down(self, n):
         global scrw, scrh
         while n > 0 and not self.reader.eof:
@@ -569,6 +599,11 @@ class View:
             self.top_pos -= scrw-1
             self.fill(x=0, y=0, h=2)
             n -= 1
+        if n > 0:
+            self.prev_chromosome()
+            self.fill(x=0, y=0, h=scrh)
+            self.scroll_up(n-1)
+            return
         if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos > self.top_pos + (scrw-1)*scrh:
             self.reader.current_info = ""
 

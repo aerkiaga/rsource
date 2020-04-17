@@ -114,7 +114,9 @@ pattern_mitichondrial = re.compile(r'>.+?Homo sapiens mitochondrion, complete ge
 def close_current_chromosome(ch):
     if not ch:
         return
-    ch_files[ch].write(ch_bytes[ch].to_bytes(1, byteorder='little', signed=False))
+    if ch_lengths[ch] % 4:
+        ch_bytes[ch] <<= (8 - 2*(ch_lengths[ch] % 4))
+        ch_files[ch].write(ch_bytes[ch].to_bytes(1, byteorder='little', signed=False))
     ch_files[ch].seek(0)
     ch_files[ch].write(ch_lengths[ch].to_bytes(4, byteorder='little', signed=False))
     ch_files[ch].close()
