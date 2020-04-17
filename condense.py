@@ -121,7 +121,7 @@ def close_current_chromosome(ch):
     ch_files[ch].write(ch_lengths[ch].to_bytes(4, byteorder='little', signed=False))
     ch_files[ch].close()
     if ch in gap_starts:
-        gap_files[ch].write(ch_lengths[ch].to_bytes(4, byteorder='little', signed=False))
+        gap_files[ch].write((ch_lengths[ch]+1).to_bytes(4, byteorder='little', signed=False))
         del gap_starts[ch]
     gap_files[ch].close()
     if ch_progress[ch] < len(chromosome_progress[ch]) - 1:
