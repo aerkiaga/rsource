@@ -534,7 +534,7 @@ class View:
                         else:
                             self.reader.jump_to(max(pos, 1))
                             reading = True
-                    else:
+                    if reading:
                         nucleotide, pair = self.get_nucleotide_and_pair()
                         self.print_char(nucleotide_decoding[nucleotide], pair)
                         self.reader.advance()
@@ -548,16 +548,8 @@ class View:
             self.screen.scroll(1)
             if self.title_pos < 0:
                 self.title_pos += 1
-            if self.top_pos + (scrw-1)*(scrh+1) > 1:
-                title = False
-            else:
-                title = True
             self.top_pos += scrw-1
-            if self.top_pos + (scrw-1)*scrh < 1 and not title:
-                fx = 1 - self.top_pos
-            else:
-                fx = 0
-            self.fill(x=fx, y=scrh-1, h=1, pos=self.top_pos + (scrw-1)*(scrh-1))
+            self.fill(x=0, y=scrh-1, h=1, pos=self.top_pos + (scrw-1)*(scrh-1))
             n -= 1
         if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos < self.top_pos:
             self.reader.current_info = ""
@@ -567,20 +559,13 @@ class View:
         while n > 0 and self.title_pos >= -10:
             self.screen.scroll(-1)
             if self.top_pos <= 1:
-                title = True
                 if self.title_pos == 0:
                     self.fill(x=0, y=1, h=1)
                     self.title_pos = -1
                 else:
                     self.title_pos -= 1
-            else:
-                title = False
             self.top_pos -= scrw-1
-            if self.top_pos < 1 and not title:
-                fx = 1 - self.top_pos
-            else:
-                fx = 0
-            self.fill(x=fx, y=0, h=2)
+            self.fill(x=0, y=0, h=2)
             n -= 1
         if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos > self.top_pos + (scrw-1)*scrh:
             self.reader.current_info = ""
