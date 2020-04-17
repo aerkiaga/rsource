@@ -475,12 +475,18 @@ class View:
                 pad = 0
             for m in range(0, pad):
                 self.print_char(" ", PAIR_UNK)
+                self.fillx += 1
             for C in title:
                 for c in chars[C][n]:
                     self.print_char(c, PAIR_UNK)
-        else:
-            for m in range(0, scrw):
+                    self.fillx += 1
+            while self.fillx < scrw-1:
                 self.print_char(" ", PAIR_UNK)
+                self.fillx += 1
+        else:
+            for m in range(0, scrw-1):
+                self.print_char(" ", PAIR_UNK)
+                self.fillx += 1
 
     def next_line(self):
         self.fillx = 0
@@ -502,23 +508,38 @@ class View:
     def print_char(self, char, pair):
         try:
             self.screen.addch(self.filly, self.fillx, char, curses.color_pair(pair))
-            return self.next_char()
         except curses.error:
             return False
 
-    def fill(self, x, y, h):
+    def fill(self, x, y, h, pos=None):
+        global scrw
         self.fillx, self.filly = x, y
         self.fillmaxy = self.filly + h
         self.current_cds_phase = None
-        if self.title_pos < 0 and self.filly < -self.title_pos:
-            self.print_title_line(self.reader.ch, self.title_pos + self.filly)
-            return
-        while not self.reader.eof:
-            nucleotide, pair = self.get_nucleotide_and_pair()
-            full = self.print_char(nucleotide_decoding[nucleotide], pair)
-            self.reader.advance()
-            if full:
-                break
+        if pos is None:
+            pos = self.top_pos
+
+        reading = False
+        while self.filly < self.fillmaxy:
+            self.fillx = 0
+            if self.title_pos < 0 and self.filly < -self.title_pos:
+                self.print_title_line(self.reader.ch, self.title_pos + self.filly)
+                pos += scrw-1
+            else:
+                while self.fillx < scrw-1:
+                    if not reading:
+                        if pos < 1:
+                            self.print_char(' ', 0)
+                            pos += 1
+                        else:
+                            self.reader.jump_to(max(pos, 1))
+                            reading = True
+                    else:
+                        nucleotide, pair = self.get_nucleotide_and_pair()
+                        self.print_char(nucleotide_decoding[nucleotide], pair)
+                        self.reader.advance()
+                    self.fillx += 1
+            self.filly += 1
         self.print_status()
 
     def scroll_down(self, n):
@@ -531,13 +552,12 @@ class View:
                 title = False
             else:
                 title = True
-            self.reader.jump_to(max(self.top_pos + (scrw-1)*scrh, 1))
             self.top_pos += scrw-1
             if self.top_pos + (scrw-1)*scrh < 1 and not title:
                 fx = 1 - self.top_pos
             else:
                 fx = 0
-            self.fill(x=fx, y=scrh-1, h=1)
+            self.fill(x=fx, y=scrh-1, h=1, pos=self.top_pos + (scrw-1)*(scrh-1))
             n -= 1
         if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos < self.top_pos:
             self.reader.current_info = ""
@@ -549,7 +569,6 @@ class View:
             if self.top_pos <= 1:
                 title = True
                 if self.title_pos == 0:
-                    self.reader.jump_to(max(self.top_pos, 1))
                     self.fill(x=0, y=1, h=1)
                     self.title_pos = -1
                 else:
@@ -557,8 +576,6 @@ class View:
             else:
                 title = False
             self.top_pos -= scrw-1
-            if not title:
-                self.reader.jump_to(max(self.top_pos, 1))
             if self.top_pos < 1 and not title:
                 fx = 1 - self.top_pos
             else:
@@ -570,7 +587,11 @@ class View:
 
     def resize(self, W, H):
         global scrw, scrh
-        self.reader.jump_to(max(self.top_pos, 1))
+        self.screen.clear()
+        if self.top_pos < 1:
+            start_gap = 1 - (self.top_pos - self.title_pos*(scrw-1))
+            lost_start_gaps = start_gap // (W-1)
+            self.top_pos = 1 - start_gap + (self.title_pos+lost_start_gaps)*(W-1)
         scrw = W
         scrh = H
         self.fill(x=0, y=0, h=scrh)
