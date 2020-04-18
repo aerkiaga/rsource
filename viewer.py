@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-import os, sys, curses, time, configparser, re, bisect, shutil
+import os, sys, curses, time, configparser, re, bisect, shutil, copy
 
 chromosomes = [
     '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
@@ -210,7 +210,7 @@ class Reader:
         self.n = (self.pos-1) % 4
         self.get_byte()
 
-    def __init__(self, ch, pos, pos_is_percent):
+    def __init__(self, ch, pos, pos_is_percent=False):
         self.ch = ch
         ch_path = os.path.join(path, self.ch + ".bin")
         self.file = open(ch_path, 'rb')
@@ -276,15 +276,32 @@ class Reader:
         self.mt_file.close()
 
 class View:
+    class Pos:
+        def __init__(self):
+            self.reader = None
+            self.pos = None
+            self.title_pos = None
+
+        def __init__(self, reader, pos):
+            self.reader = reader
+            self.pos = pos
+            self.title_pos = None
+
+        def istitle(self):
+            return self.title_pos is not None
+
+        def next_line(self):
+            self.pos += scrw-1
+            pass
+
     def __init__(self, reader, stdscr):
         self.reader = reader
         self.next_reader = None
         self.screen = stdscr
-        self.top_pos = self.reader.pos
-        self.title_pos = 0
+        self.top_pos = self.Pos(self.reader, self.reader.pos)
 
     def print_status(self):
-        status = "{} ({:.3f}%)".format(self.top_pos, self.top_pos*100/self.reader.ch_size)
+        status = "{} ({:.3f}%)".format(self.top_pos.pos, self.top_pos.pos*100/self.reader.ch_size)
         if self.reader.current_info:
             status += " {} ({})".format(self.reader.current_info, strand_decode[self.reader.current_info_strand])
 
@@ -303,17 +320,17 @@ class View:
                     break
             self.screen.chgat(y, x, curses.color_pair(pair))
 
-    def get_nucleotide_and_pair(self):
+    def get_nucleotide_and_pair(self, reader):
         global prev_nucleotide, highlight
         pair = None
-        nucleotide = self.reader.read()
-        features = self.reader.current_features
+        nucleotide = reader.read()
+        features = reader.current_features
         if feature_encode['gap'] in features:
             nucleotide = 4
             pair = PAIR_UNK
         elif feature_encode['CDS'] in features:
             if self.current_cds_phase is None:
-                self.current_cds_phase = self.reader.get_cds_phase()
+                self.current_cds_phase = reader.get_cds_phase()
             if self.current_cds_phase & 4:
                 pair = PAIR_CDS2 + nucleotide
             else:
@@ -536,29 +553,29 @@ class View:
         self.fillmaxy = self.filly + h
         self.current_cds_phase = None
         if pos is None:
-            pos = self.top_pos
+            pos = copy.copy(self.top_pos)
 
         reading = False
         while self.filly < self.fillmaxy:
             self.fillx = 0
-            if self.title_pos < 0 and self.filly < -self.title_pos:
-                self.print_title_line(self.reader.ch, self.title_pos + self.filly)
-                pos += scrw-1
+            if pos.istitle():
+                self.print_title_line(pos.reader.ch, pos.title_pos)
+                pos.next_line()
             else:
                 while self.fillx < scrw-1:
                     if not reading:
-                        if pos < 1:
+                        if pos.pos < 1:
                             self.print_char(' ', 0)
-                            pos += 1
+                            pos.pos += 1
                         else:
-                            self.reader.jump_to(max(pos, 1))
+                            pos.reader.jump_to(max(pos.pos, 1))
                             reading = True
-                    if self.reader.eof:
+                    if pos.reader.eof:
                         self.print_char(' ', 0)
                     elif reading:
-                        nucleotide, pair = self.get_nucleotide_and_pair()
+                        nucleotide, pair = self.get_nucleotide_and_pair(pos.reader)
                         self.print_char(nucleotide_decoding[nucleotide], pair)
-                        self.reader.advance()
+                        pos.reader.advance()
                     self.fillx += 1
             self.filly += 1
         self.print_status()
@@ -571,48 +588,47 @@ class View:
         self.next_reader = self.reader
         ch = chromosomes[index-1]
         self.reader = Reader(ch, 0, False)
-        self.top_pos = self.reader.ch_size - self.reader.ch_size%(scrw-1) + scrw-1
-        self.title_pos = 0
+        self.top_pos = self.Pos(self.reader, self.reader.ch_size - self.reader.ch_size%(scrw-1) + scrw-1)
 
     def scroll_down(self, n):
         global scrw, scrh
         while n > 0 and not self.reader.eof:
             self.screen.scroll(1)
-            if self.title_pos < 0:
-                self.title_pos += 1
-            self.top_pos += scrw-1
-            self.fill(x=0, y=scrh-1, h=1, pos=self.top_pos + (scrw-1)*(scrh-1))
+            if self.top_pos.istitle():
+                self.top_pos.title_pos += 1
+            self.top_pos.next_line()
+            self.fill(x=0, y=scrh-1, h=1, pos=self.Pos(self.reader, self.top_pos.pos + (scrw-1)*(scrh-1)))
             n -= 1
-        if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos < self.top_pos:
+        if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos < self.top_pos.pos:
             self.reader.current_info = ""
 
     def scroll_up(self, n):
         global scrw, scrh
-        while n > 0 and self.title_pos >= -10:
+        while n > 0 and (not self.top_pos.istitle() or self.top_pos.title_pos >= -10):
             self.screen.scroll(-1)
-            if self.top_pos <= 1:
-                if self.title_pos == 0:
+            if self.top_pos.pos <= 1:
+                if not self.top_pos.title_pos:
                     self.fill(x=0, y=1, h=1)
-                    self.title_pos = -1
+                    self.top_pos.title_pos = -1
                 else:
-                    self.title_pos -= 1
-            self.top_pos -= scrw-1
+                    self.top_pos.title_pos -= 1
+            self.top_pos.pos -= scrw-1
             self.fill(x=0, y=0, h=2)
             n -= 1
         if n > 0:
             self.prev_chromosome()
             self.scroll_up(n-1)
             return
-        if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos > self.top_pos + (scrw-1)*scrh:
+        if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos > self.top_pos.pos + (scrw-1)*scrh:
             self.reader.current_info = ""
 
     def resize(self, W, H):
         global scrw, scrh
         self.screen.clear()
-        if self.top_pos < 1:
-            start_gap = 1 - (self.top_pos - self.title_pos*(scrw-1))
+        if self.top_pos.pos < 1:
+            start_gap = 1 - (self.top_pos.pos - self.title_pos.pos*(scrw-1))
             lost_start_gaps = start_gap // (W-1)
-            self.top_pos = 1 - start_gap + (self.title_pos+lost_start_gaps)*(W-1)
+            self.top_pos.pos = 1 - start_gap + (self.title_pos.pos+lost_start_gaps)*(W-1)
         scrw = W
         scrh = H
         self.fill(x=0, y=0, h=scrh)
