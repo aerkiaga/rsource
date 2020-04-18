@@ -571,7 +571,7 @@ class View:
         self.next_reader = self.reader
         ch = chromosomes[index-1]
         self.reader = Reader(ch, 0, False)
-        self.top_pos = self.reader.ch_size - self.reader.ch_size%(scrw-1)
+        self.top_pos = self.reader.ch_size - self.reader.ch_size%(scrw-1) + scrw-1
         self.title_pos = 0
 
     def scroll_down(self, n):
@@ -601,7 +601,6 @@ class View:
             n -= 1
         if n > 0:
             self.prev_chromosome()
-            self.fill(x=0, y=0, h=scrh)
             self.scroll_up(n-1)
             return
         if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos > self.top_pos + (scrw-1)*scrh:
