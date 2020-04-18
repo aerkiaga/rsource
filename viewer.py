@@ -645,10 +645,6 @@ class View:
     def resize(self, W, H):
         global scrw, scrh
         self.screen.clear()
-        if self.top_pos.pos < 1:
-            start_gap = 1 - (self.top_pos.pos - self.title_pos.pos*(scrw-1))
-            lost_start_gaps = start_gap // (W-1)
-            self.top_pos.pos = 1 - start_gap + (self.title_pos.pos+lost_start_gaps)*(W-1)
         scrw = W
         scrh = H
         self.fill(x=0, y=0, h=scrh)
