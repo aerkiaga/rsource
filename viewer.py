@@ -287,12 +287,38 @@ class View:
             self.pos = pos
             self.title_pos = None
 
+        def sync_reader(self):
+            if self.pos == self.reader.pos:
+                pass
+            elif self.pos == self.reader.pos+1:
+                self.reader.advance()
+            else:
+                self.reader.jump_to(max(self.pos, 1))
+
         def istitle(self):
             return self.title_pos is not None
 
+        def ismargin(self):
+            if self.pos < 1:
+                return True
+            self.sync_reader()
+            return self.reader.eof
+
+        def advance(self):
+            self.pos += 1
+            if not self.ismargin():
+                if self.pos == 1:
+                    self.reader.jump_to(1)
+                else:
+                    self.reader.advance()
+
         def next_line(self):
-            self.pos += scrw-1
-            pass
+            if self.istitle():
+                self.title_pos += 1
+                if self.title_pos == 0:
+                    self.title_pos = None
+            else:
+                self.pos += scrw-1
 
     def __init__(self, reader, stdscr):
         self.reader = reader
@@ -555,7 +581,6 @@ class View:
         if pos is None:
             pos = copy.copy(self.top_pos)
 
-        reading = False
         while self.filly < self.fillmaxy:
             self.fillx = 0
             if pos.istitle():
@@ -563,19 +588,12 @@ class View:
                 pos.next_line()
             else:
                 while self.fillx < scrw-1:
-                    if not reading:
-                        if pos.pos < 1:
-                            self.print_char(' ', 0)
-                            pos.pos += 1
-                        else:
-                            pos.reader.jump_to(max(pos.pos, 1))
-                            reading = True
-                    if pos.reader.eof:
+                    if pos.ismargin():
                         self.print_char(' ', 0)
-                    elif reading:
+                    else:
                         nucleotide, pair = self.get_nucleotide_and_pair(pos.reader)
                         self.print_char(nucleotide_decoding[nucleotide], pair)
-                        pos.reader.advance()
+                    pos.advance()
                     self.fillx += 1
             self.filly += 1
         self.print_status()
@@ -594,10 +612,11 @@ class View:
         global scrw, scrh
         while n > 0 and not self.reader.eof:
             self.screen.scroll(1)
-            if self.top_pos.istitle():
-                self.top_pos.title_pos += 1
             self.top_pos.next_line()
-            self.fill(x=0, y=scrh-1, h=1, pos=self.Pos(self.reader, self.top_pos.pos + (scrw-1)*(scrh-1)))
+            pos = self.top_pos.pos + (scrw-1)*(scrh-1)
+            if self.top_pos.title_pos is not None:
+                pos += self.top_pos.title_pos*(scrw-1)
+            self.fill(x=0, y=scrh-1, h=1, pos=self.Pos(self.reader, pos))
             n -= 1
         if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos < self.top_pos.pos:
             self.reader.current_info = ""
@@ -612,7 +631,8 @@ class View:
                     self.top_pos.title_pos = -1
                 else:
                     self.top_pos.title_pos -= 1
-            self.top_pos.pos -= scrw-1
+            else:
+                self.top_pos.pos -= scrw-1
             self.fill(x=0, y=0, h=2)
             n -= 1
         if n > 0:
