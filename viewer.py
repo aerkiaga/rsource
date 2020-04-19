@@ -355,7 +355,7 @@ class View:
                 if self.title_pos == 0:
                     self.title_pos = None
             else:
-                if self.pos + scrw-1 > self.reader.ch_size:
+                if self.pos + scrw-1 > self.reader.ch_size and (self.next_ch_name() is not None):
                     self.next_ch()
                 else:
                     self.pos += scrw-1
@@ -377,12 +377,12 @@ class View:
                 self.next_line()
 
         def check_ch_end(self):
-            if self.pos > self.reader.ch_size:
+            if self.pos > self.reader.ch_size and (self.next_ch_name() is not None):
                 self.pos -= scrw-1
                 self.next_ch()
 
         def can_scroll_down(self):
-            return (not self.reader.eof) and (self.pos + scrw-1 <= self.reader.ch_size) or (self.prev_ch_name() is not None)
+            return (self.pos + (scrw-1)*scrh <= self.reader.ch_size) or (self.next_ch_name() is not None)
 
         def can_scroll_up(self):
             return (not self.istitle()) or (self.title_pos > -10) or (self.prev_ch_name() is not None)
