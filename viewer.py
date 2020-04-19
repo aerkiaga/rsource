@@ -183,6 +183,14 @@ class Reader:
             self.cur_feat_pos = None
         self.next_feat = lost_feat # new next (previous current)
 
+    def jump_to_mt_start(self):
+        self.mt_file.seek(0)
+        self.cur_feat_pos = None
+        self.next_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False)
+        self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
+        self.pos = 0
+        self.current_features.clear()
+
     def jump_to_mt_end(self):
         self.mt_file.seek(0, 2)
         self.next_pos = self.cur_feat_pos = None
@@ -234,25 +242,20 @@ class Reader:
         ch_size = self.file.read(4)
         self.ch_size = int.from_bytes(ch_size, byteorder='little', signed=False)
 
-        self.pos = pos
         if pos_is_percent:
-            self.pos = (self.pos * self.ch_size) // 100
+            pos = (pos * self.ch_size) // 100
         if pos_initial <= 0:
-            self.pos = self.ch_size + self.pos + 1
-        self.seek_pos()
+            pos = self.ch_size + pos + 1
 
         mt_path = os.path.join(path, self.ch + ".dat")
         self.mt_file = open(mt_path, 'rb')
-        self.next_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False)
-        self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
 
         self.current_features = {}
-        self.cur_feat_pos = None
         self.current_info = ""
         self.prev_info_pos = None
 
-        while(self.next_pos and self.pos >= self.next_pos):
-            self.update_features()
+        self.jump_to_mt_start()
+        self.jump_to(pos)
 
         self.cds_phase_cache = {
             'saved_fpos' : None,
@@ -280,10 +283,15 @@ class Reader:
             self.eof = True
 
     def jump_to(self, P):
-        if P == self.ch_size:
+        if P == 1:
+            self.jump_to_mt_start()
+        elif P == self.ch_size:
             self.jump_to_mt_end()
+        elif P < abs(P - self.pos):
+            self.jump_to(1)
         elif (self.ch_size - P) < abs(P - self.pos):
             self.jump_to(self.ch_size)
+
         if P > self.pos:
             while(self.next_pos and P >= self.next_pos):
                 self.update_features()
