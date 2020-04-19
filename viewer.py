@@ -358,8 +358,7 @@ class View:
                 self.pos -= scrw-1
 
         def can_scroll_down(self):
-            pass
-            return not self.reader.eof
+            return (not self.reader.eof) and (self.pos + scrw-1 <= self.reader.ch_size)
 
         def can_scroll_up(self):
             return (not self.istitle()) or (self.title_pos > -10) or (self.prev_ch_name() is not None)
