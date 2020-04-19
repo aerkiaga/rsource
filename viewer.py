@@ -409,14 +409,13 @@ class View:
             return (not self.istitle()) or (self.title_pos > -10) or (self.prev_ch_name() is not None)
 
     def __init__(self, reader, stdscr):
-        self.reader = reader
         self.screen = stdscr
-        self.top_pos = self.Pos(self.reader, self.reader.pos)
+        self.top_pos = self.Pos(reader, reader.pos)
 
     def print_status(self):
-        status = "{} ({:.3f}%)".format(self.top_pos.pos, self.top_pos.pos*100/self.reader.ch_size)
-        if self.reader.current_info:
-            status += " {} ({})".format(self.reader.current_info, strand_decode[self.reader.current_info_strand])
+        status = "{} ({:.3f}%)".format(self.top_pos.pos, self.top_pos.pos*100/self.top_pos.reader.ch_size)
+        if self.top_pos.reader.current_info:
+            status += " {} ({})".format(self.top_pos.reader.current_info, strand_decode[self.top_pos.reader.current_info_strand])
 
         self.screen.addstr(0, 0, status)
 
@@ -677,8 +676,8 @@ class View:
             self.top_pos.next_line()
             self.fill(x=0, y=scrh-1, h=1)
             n -= 1
-        if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos < self.top_pos.pos:
-            self.reader.current_info = ""
+        if self.top_pos.reader.current_info and self.top_pos.reader.prev_info_pos and self.top_pos.reader.prev_info_pos < self.top_pos.pos:
+            self.top_pos.reader.current_info = ""
 
     def scroll_up(self, n):
         global scrw, scrh
@@ -687,8 +686,8 @@ class View:
             self.top_pos.prev_line()
             self.fill(x=0, y=0, h=2)
             n -= 1
-        if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos > self.top_pos.pos + (scrw-1)*scrh:
-            self.reader.current_info = ""
+        if self.top_pos.reader.current_info and self.top_pos.reader.prev_info_pos and self.top_pos.reader.prev_info_pos > self.top_pos.pos + (scrw-1)*scrh:
+            self.top_pos.reader.current_info = ""
 
     def resize(self, W, H):
         global scrw, scrh
