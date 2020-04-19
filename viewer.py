@@ -320,6 +320,19 @@ class View:
             else:
                 self.pos += scrw-1
 
+        def prev_line(self):
+            if self.pos <= 1:
+                if not self.istitle():
+                    self.title_pos = -1
+                else:
+                    self.title_pos -= 1
+            else:
+                self.pos -= scrw-1
+
+        def can_scroll_down(self):
+            pass
+            return not self.reader.eof
+
     def __init__(self, reader, stdscr):
         self.reader = reader
         self.next_reader = None
@@ -610,7 +623,7 @@ class View:
 
     def scroll_down(self, n):
         global scrw, scrh
-        while n > 0 and not self.reader.eof:
+        while n > 0 and self.top_pos.can_scroll_down():
             self.screen.scroll(1)
             self.top_pos.next_line()
             pos = self.top_pos.pos + (scrw-1)*(scrh-1)
@@ -625,19 +638,12 @@ class View:
         global scrw, scrh
         while n > 0 and (not self.top_pos.istitle() or self.top_pos.title_pos >= -10):
             self.screen.scroll(-1)
-            if self.top_pos.pos <= 1:
-                if not self.top_pos.title_pos:
-                    self.fill(x=0, y=1, h=1)
-                    self.top_pos.title_pos = -1
-                else:
-                    self.top_pos.title_pos -= 1
-            else:
-                self.top_pos.pos -= scrw-1
+            self.top_pos.prev_line()
             self.fill(x=0, y=0, h=2)
             n -= 1
         if n > 0:
             self.prev_chromosome()
-            self.scroll_up(n-1)
+            self.scroll_up(n)
             return
         if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos > self.top_pos.pos + (scrw-1)*scrh:
             self.reader.current_info = ""
