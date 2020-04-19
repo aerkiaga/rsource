@@ -183,6 +183,15 @@ class Reader:
             self.cur_feat_pos = None
         self.next_feat = lost_feat # new next (previous current)
 
+    def jump_to_mt_end(self):
+        self.mt_file.seek(0, 2)
+        self.next_pos = self.cur_feat_pos = None
+        self.unget_feature()
+        self.cur_feat_pos = int.from_bytes(self.mt_file.read(4), byteorder='little', signed=False)
+        self.mt_file.seek(0, 2)
+        self.next_feat = None
+        self.current_features.clear()
+
     def get_cds_phase(self):
         saved_fpos = self.mt_file.tell()
         if saved_fpos == self.cds_phase_cache['saved_fpos']:
@@ -271,6 +280,10 @@ class Reader:
             self.eof = True
 
     def jump_to(self, P):
+        if P == self.ch_size:
+            self.jump_to_mt_end()
+        elif (self.ch_size - P) < abs(P - self.pos):
+            self.jump_to(self.ch_size)
         if P > self.pos:
             while(self.next_pos and P >= self.next_pos):
                 self.update_features()
