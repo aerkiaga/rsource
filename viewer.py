@@ -637,23 +637,6 @@ class View:
                 self.print_char(" ", PAIR_UNK)
                 self.fillx += 1
 
-    def next_line(self):
-        self.fillx = 0
-        self.filly += 1
-        if self.filly >= self.fillmaxy:
-            self.filly = 0
-            return True
-        else:
-            return False
-
-    def next_char(self):
-        global scrw
-        self.fillx += 1
-        if self.fillx >= scrw-1:
-            return self.next_line()
-        else:
-            return False
-
     def print_char(self, char, pair):
         try:
             self.screen.addch(self.filly, self.fillx, char, curses.color_pair(pair))
