@@ -376,6 +376,11 @@ class View:
             for l in range(0, n):
                 self.next_line()
 
+        def check_ch_end(self):
+            if self.pos > self.reader.ch_size:
+                self.pos -= scrw-1
+                self.next_ch()
+
         def can_scroll_down(self):
             return (not self.reader.eof) and (self.pos + scrw-1 <= self.reader.ch_size) or (self.prev_ch_name() is not None)
 
@@ -388,7 +393,7 @@ class View:
         self.top_pos = self.Pos(self.reader, self.reader.pos)
 
     def print_status(self):
-        status = "{} ({:.3f}%)".format(self.top_pos.reader.eof, self.top_pos.pos*100/self.reader.ch_size)
+        status = "{} ({:.3f}%)".format(self.top_pos.pos, self.top_pos.pos*100/self.reader.ch_size)
         if self.reader.current_info:
             status += " {} ({})".format(self.reader.current_info, strand_decode[self.reader.current_info_strand])
 
@@ -657,6 +662,7 @@ class View:
                         self.print_char(nucleotide_decoding[nucleotide], pair)
                     pos.advance()
                     self.fillx += 1
+                pos.check_ch_end()
             self.filly += 1
         self.print_status()
 
