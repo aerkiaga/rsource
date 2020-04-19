@@ -88,6 +88,14 @@ prev_nucleotide = None
 paused = False
 
 class Reader:
+    ch_readers = {}
+
+    @classmethod
+    def get_ch_reader(cls, ch):
+        if ch not in cls.ch_readers:
+            return cls(ch, 0)
+        return cls.ch_readers[ch]
+
     def apply_feature(self, feat):
         if feat & end_encode:
             if (feat & feature_mask) not in self.current_features:
@@ -243,6 +251,8 @@ class Reader:
             'start_pos' : None
         }
 
+        Reader.ch_readers[ch] = self
+
     def read(self):
         b = int.from_bytes(self.byte, byteorder='little')
         return (b >> (2*(3-self.n))) & 3
@@ -295,6 +305,13 @@ class View:
             else:
                 self.reader.jump_to(max(self.pos, 1))
 
+        def prev_ch_name(self):
+            index = chromosomes.index(self.reader.ch)
+            if index == 0:
+                return None
+            self.next_reader = self.reader
+            return chromosomes[index-1]
+
         def istitle(self):
             return self.title_pos is not None
 
@@ -303,6 +320,14 @@ class View:
                 return True
             self.sync_reader()
             return self.reader.eof
+
+        def prev_ch(self):
+            ch = self.prev_ch_name()
+            self.reader = Reader.get_ch_reader(ch)
+            self.pos = self.reader.ch_size + self.pos
+            if self.pos > self.reader.ch_size:
+                self.pos -= scrw-1
+            self.title_pos = None
 
         def advance(self):
             self.pos += 1
@@ -325,13 +350,19 @@ class View:
                 if not self.istitle():
                     self.title_pos = -1
                 else:
-                    self.title_pos -= 1
+                    if self.title_pos == -10:
+                        self.prev_ch()
+                    else:
+                        self.title_pos -= 1
             else:
                 self.pos -= scrw-1
 
         def can_scroll_down(self):
             pass
             return not self.reader.eof
+
+        def can_scroll_up(self):
+            return (not self.istitle()) or (self.title_pos > -10) or (self.prev_ch_name() is not None)
 
     def __init__(self, reader, stdscr):
         self.reader = reader
@@ -611,16 +642,6 @@ class View:
             self.filly += 1
         self.print_status()
 
-    def prev_chromosome(self):
-        global scrw
-        index = chromosomes.index(self.reader.ch)
-        if index == 0:
-            return
-        self.next_reader = self.reader
-        ch = chromosomes[index-1]
-        self.reader = Reader(ch, 0, False)
-        self.top_pos = self.Pos(self.reader, self.reader.ch_size - self.reader.ch_size%(scrw-1) + scrw-1)
-
     def scroll_down(self, n):
         global scrw, scrh
         while n > 0 and self.top_pos.can_scroll_down():
@@ -636,15 +657,11 @@ class View:
 
     def scroll_up(self, n):
         global scrw, scrh
-        while n > 0 and (not self.top_pos.istitle() or self.top_pos.title_pos >= -10):
+        while n > 0 and self.top_pos.can_scroll_up():
             self.screen.scroll(-1)
             self.top_pos.prev_line()
             self.fill(x=0, y=0, h=2)
             n -= 1
-        if n > 0:
-            self.prev_chromosome()
-            self.scroll_up(n)
-            return
         if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos > self.top_pos.pos + (scrw-1)*scrh:
             self.reader.current_info = ""
 
