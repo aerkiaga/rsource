@@ -309,8 +309,13 @@ class View:
             index = chromosomes.index(self.reader.ch)
             if index == 0:
                 return None
-            self.next_reader = self.reader
             return chromosomes[index-1]
+
+        def next_ch_name(self):
+            index = chromosomes.index(self.reader.ch)
+            if index == len(chromosomes)-1:
+                return None
+            return chromosomes[index+1]
 
         def istitle(self):
             return self.title_pos is not None
@@ -320,6 +325,13 @@ class View:
                 return True
             self.sync_reader()
             return self.reader.eof
+
+        def next_ch(self):
+            self.pos = self.pos - self.reader.ch_size
+            ch = self.next_ch_name()
+            self.reader = Reader.get_ch_reader(ch)
+            self.title_pos = -10
+            self.sync_reader()
 
         def prev_ch(self):
             ch = self.prev_ch_name()
@@ -343,7 +355,10 @@ class View:
                 if self.title_pos == 0:
                     self.title_pos = None
             else:
-                self.pos += scrw-1
+                if self.reader.eof or self.pos + scrw-1 > self.reader.ch_size:
+                    self.next_ch()
+                else:
+                    self.pos += scrw-1
 
         def prev_line(self):
             if self.pos <= 1:
@@ -357,6 +372,10 @@ class View:
             else:
                 self.pos -= scrw-1
 
+        def advance_lines(self, n):
+            for l in range(0, n):
+                self.next_line()
+
         def can_scroll_down(self):
             return (not self.reader.eof) and (self.pos + scrw-1 <= self.reader.ch_size)
 
@@ -365,12 +384,11 @@ class View:
 
     def __init__(self, reader, stdscr):
         self.reader = reader
-        self.next_reader = None
         self.screen = stdscr
         self.top_pos = self.Pos(self.reader, self.reader.pos)
 
     def print_status(self):
-        status = "{} ({:.3f}%)".format(self.top_pos.pos, self.top_pos.pos*100/self.reader.ch_size)
+        status = "{} ({:.3f}%)".format(self.top_pos.reader.eof, self.top_pos.pos*100/self.reader.ch_size)
         if self.reader.current_info:
             status += " {} ({})".format(self.reader.current_info, strand_decode[self.reader.current_info_strand])
 
@@ -616,13 +634,14 @@ class View:
         except curses.error:
             return False
 
-    def fill(self, x, y, h, pos=None):
+    def fill(self, x, y, h):
         global scrw
         self.fillx, self.filly = x, y
         self.fillmaxy = self.filly + h
         self.current_cds_phase = None
-        if pos is None:
-            pos = copy.copy(self.top_pos)
+
+        pos = copy.copy(self.top_pos)
+        pos.advance_lines(y)
 
         while self.filly < self.fillmaxy:
             self.fillx = 0
@@ -646,10 +665,7 @@ class View:
         while n > 0 and self.top_pos.can_scroll_down():
             self.screen.scroll(1)
             self.top_pos.next_line()
-            pos = self.top_pos.pos + (scrw-1)*(scrh-1)
-            if self.top_pos.title_pos is not None:
-                pos += self.top_pos.title_pos*(scrw-1)
-            self.fill(x=0, y=scrh-1, h=1, pos=self.Pos(self.reader, pos))
+            self.fill(x=0, y=scrh-1, h=1)
             n -= 1
         if self.reader.current_info and self.reader.prev_info_pos and self.reader.prev_info_pos < self.top_pos.pos:
             self.reader.current_info = ""
