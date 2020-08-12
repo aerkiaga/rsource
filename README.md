@@ -214,7 +214,7 @@ leaving an untraslated region of mRNA (the 5' UTR). The start codon also codes f
 an amino acid, the first of every translated protein. Then, 141 further codons are
 encountered, making a 142 amino acid chain. Translation ends when one of the three
 possible "stop codons" is found; in this gene, this last codon is UAA (TAA here).
-The stop codon doen't code for any amino acid, it only signals the end of the
+The stop codon doesn't code for any amino acid, it only signals the end of the
 translated region and releases the new protein. After it, we can see another
 untranslated sequence (the 3' UTR).
 
@@ -223,7 +223,7 @@ closely a little upstream of the gene, you should find the sequence `CAAT`. This
 is part of the longer sequence `CAGCCAATGA`, which signals a transcription site.
 The sequence, called a "CAAT box", changes a lot between genes, but the `CAAT`
 part is highly conserved. Other sequences decide how often and in what situations
-transcription should start; all this elements form the *promoter* of a gene, and
+transcription should start; all these elements form the *promoter* of a gene, and
 are recognized by different proteins that control transcription. Additionally,
 the transcribed section begins inside a sequence `GC ACTC`, called the Initiator.
 
@@ -235,7 +235,7 @@ with `CAG`. These sequences are not exactly the same in all genes (although very
 similar), and there are alternate methods for delimiting introns and exons. The
 basic idea, however, is usually the same: the ends of an intron are recognized by
 proteins, brought together, and cut from the surrounding exons, that are joined.
-Not that splicing is done after transcription, so Ts here would actually be Us.
+Note that splicing is done after transcription, so Ts here would actually be Us.
 
 The 5' UTR contains special sequences too. In fact, the start codon is part of a
 larger sequence, `GAACCCACC ATG G` in this case, named Kozak sequence after its
