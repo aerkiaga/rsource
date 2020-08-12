@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-import os, sys, curses, time, configparser, re, bisect, shutil, copy
+import os, sys, curses, time, configparser, re, bisect, shutil, copy, collections
 
 chromosomes = [
     '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
@@ -288,16 +288,22 @@ class Reader:
     #read nucleotide at current position
     def read(self):
         b = int.from_bytes(self.byte, byteorder='little')
-        return (b >> (2*(3-self.n))) & 3
+        nucleotide = (b >> (2*(3-self.n))) & 3
+        return nucleotide
 
-    #advance to next nucleotide, possibly updating features
-    def advance(self):
-        global scrw, scrh
+    #advance to next nucleotide, without updating features
+    def advance_nucleotide(self):
         self.n += 1
         if self.n & 3 == 0:
             self.get_byte()
             self.n &= 3
+        self.last_nucleotides.append(self.read())
         self.pos += 1
+
+    #advance to next nucleotide, possibly updating features
+    def advance(self):
+        global scrw, scrh
+        self.advance_nucleotide()
         if self.pos == self.next_pos:
             while self.pos == self.next_pos:
                 self.update_features()
@@ -321,9 +327,11 @@ class Reader:
         if P < self.pos:
             while(self.cur_feat_pos and P < self.cur_feat_pos):
                 self.update_features_backwards()
-        self.pos = P
+        self.last_nucleotides = collections.deque([None] * 20, 20)
+        self.pos = P - 20 if P > 20 else 1
         self.seek_pos()
-        pass
+        while self.pos < P:
+            self.advance_nucleotide()
 
     def __del__(self):
         self.file.close()
@@ -472,47 +480,57 @@ class View:
                     break
             self.screen.chgat(y, x, curses.color_pair(pair))
 
-    #get the appropriate nucleotide and pair for the current view position
-    def get_nucleotide_and_pair(self, reader):
-        global prev_nucleotide, highlight
+    #possibly apply highlight to preceding nucleotides, return pair for current one
+    def apply_highlight(self, reader):
+        global highlight
         pair = None
-        nucleotide = reader.read()
-        features = reader.current_features
-        if feature_encode['gap'] in features:
-            nucleotide = 4
-            pair = PAIR_UNK
-        elif feature_encode['CDS'] in features:
-            if self.current_cds_phase is None:
-                self.current_cds_phase = reader.get_cds_phase()
-            if self.current_cds_phase & 4:
-                pair = PAIR_CDS2 + nucleotide
-            else:
-                pair = PAIR_CDS + nucleotide
-            self.current_cds_phase += 1
-            if self.current_cds_phase & 3 == 3:
-                self.current_cds_phase ^= 4
-                self.current_cds_phase &= 4
-        elif feature_encode['tRNA'] in features:
-            pair = PAIR_TRNA + nucleotide
-        elif feature_encode['rRNA'] in features:
-            pair = PAIR_RRNA + nucleotide
-        elif feature_encode['miRNA'] in features:
-            pair = PAIR_MIRNA + nucleotide
-        elif feature_encode['exon'] in features:
-            if feature_encode['gene'] in features:
-                pair = PAIR_UTR_GENE + nucleotide
-            elif feature_encode['pseudogene'] in features:
-                pair = PAIR_EXON_PSEUDO + nucleotide
-            else:
-                pair = PAIR_UNK
-        elif feature_encode['gene'] in features or feature_encode['pseudogene'] in features:
-            pair = PAIR_INTRON + nucleotide
-        else:
-            pair = PAIR_NONE + nucleotide
-        if highlight['cpg'] and prev_nucleotide == 1 and nucleotide == 2:
+        if highlight['cpg'] and reader.last_nucleotides[-2] == 1 and reader.last_nucleotides[-1] == 2:
             pair = PAIR_HIGHLIGHT
             #also set the pair before this
             self.set_prev_pairs(1, PAIR_HIGHLIGHT)
+        return pair
+
+    #get the appropriate nucleotide and pair for the current view position
+    def get_nucleotide_and_pair(self, reader):
+        global prev_nucleotide
+        pair = None
+        nucleotide = reader.read()
+        features = reader.current_features
+        highlight_pair = self.apply_highlight(reader)
+        if highlight_pair is not None:
+            pair = highlight_pair
+        else:
+            if feature_encode['gap'] in features:
+                nucleotide = 4
+                pair = PAIR_UNK
+            elif feature_encode['CDS'] in features:
+                if self.current_cds_phase is None:
+                    self.current_cds_phase = reader.get_cds_phase()
+                if self.current_cds_phase & 4:
+                    pair = PAIR_CDS2 + nucleotide
+                else:
+                    pair = PAIR_CDS + nucleotide
+                self.current_cds_phase += 1
+                if self.current_cds_phase & 3 == 3:
+                    self.current_cds_phase ^= 4
+                    self.current_cds_phase &= 4
+            elif feature_encode['tRNA'] in features:
+                pair = PAIR_TRNA + nucleotide
+            elif feature_encode['rRNA'] in features:
+                pair = PAIR_RRNA + nucleotide
+            elif feature_encode['miRNA'] in features:
+                pair = PAIR_MIRNA + nucleotide
+            elif feature_encode['exon'] in features:
+                if feature_encode['gene'] in features:
+                    pair = PAIR_UTR_GENE + nucleotide
+                elif feature_encode['pseudogene'] in features:
+                    pair = PAIR_EXON_PSEUDO + nucleotide
+                else:
+                    pair = PAIR_UNK
+            elif feature_encode['gene'] in features or feature_encode['pseudogene'] in features:
+                pair = PAIR_INTRON + nucleotide
+            else:
+                pair = PAIR_NONE + nucleotide
         prev_nucleotide = nucleotide
         return (nucleotide, pair)
 
