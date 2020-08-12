@@ -89,7 +89,6 @@ highlight = {
 ch_initial = "1"
 pos_initial = 1
 pos_percent = False
-prev_nucleotide = None
 paused = False
 
 class Reader:
@@ -492,7 +491,6 @@ class View:
 
     #get the appropriate nucleotide and pair for the current view position
     def get_nucleotide_and_pair(self, reader):
-        global prev_nucleotide
         pair = None
         nucleotide = reader.read()
         features = reader.current_features
@@ -531,7 +529,6 @@ class View:
                 pair = PAIR_INTRON + nucleotide
             else:
                 pair = PAIR_NONE + nucleotide
-        prev_nucleotide = nucleotide
         return (nucleotide, pair)
 
     #print a line of the title of a chromosome
