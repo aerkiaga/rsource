@@ -35,8 +35,10 @@ strand_decode = {
     3 : '.'
 }
 
+# The pair numbers to which the different colors will be assigned
 PAIR_UNK = 0
 PAIR_HIGHLIGHT = 1
+# All the following get 4 pairs each, one per nucleotide
 PAIR_NONE = 8
 PAIR_EXON_PSEUDO = 12
 PAIR_UTR_GENE = 16
@@ -47,6 +49,7 @@ PAIR_TRNA = 32
 PAIR_RRNA = 36
 PAIR_MIRNA = 40
 
+#Foreground color
 nucleotide_colors = {
     0 : 9,
     1 : 11,
@@ -55,6 +58,7 @@ nucleotide_colors = {
     4 : 5
 }
 
+#Background color
 region_colors = {
     PAIR_NONE : -1,
     PAIR_EXON_PSEUDO : 102,
@@ -67,6 +71,7 @@ region_colors = {
     PAIR_MIRNA : 136
 }
 
+#Other colors
 other_colors = {
     PAIR_HIGHLIGHT : 11
 }
@@ -96,18 +101,22 @@ class Reader:
             return cls(ch, 0)
         return cls.ch_readers[ch]
 
+    #apply feature (start/end of region) to self.current_features
     def apply_feature(self, feat):
+        #end of region
         if feat & end_encode:
             if (feat & feature_mask) not in self.current_features:
                 return #D
             self.current_features[feat & feature_mask] -= 1
             if self.current_features[feat & feature_mask] == 0:
                 del self.current_features[feat & feature_mask]
+        #start of region
         else:
             if (feat & feature_mask) not in self.current_features:
                 self.current_features[feat & feature_mask] = 0
             self.current_features[feat & feature_mask] += 1
 
+    #get extra info about the current feature in metadata file (gene name, CDS phase)
     def get_feature_info(self):
         if self.next_feat == feature_encode['gene']:
             info = b""
@@ -125,6 +134,7 @@ class Reader:
             self.mt_file.read(1)
         return ""
 
+    #apply current feature, get its info, get next feature from metadata file
     def update_features(self):
         self.cur_feat_pos = self.next_pos
         self.apply_feature(self.next_feat)
@@ -141,8 +151,9 @@ class Reader:
             self.next_pos = int.from_bytes(dword, byteorder='little', signed=False)
             self.next_feat = int.from_bytes(self.mt_file.read(1), byteorder='little', signed=False)
 
+    #seeks metadata file to previous feature
+    #only seeks, no other side effect; returns type of feature it lands in
     def unget_feature(self):
-        #only seeks, no other side effect; returns type of feature it lands in
         if self.mt_file.tell() < 10:
             return None
         self.mt_file.seek(self.mt_file.tell() - 6)
@@ -156,6 +167,8 @@ class Reader:
             self.mt_file.seek(self.mt_file.tell() - 2)
         return cur_feat
 
+    #updates self.current_features and seeks metadata file backwards
+    #opposite of update_features()
     def update_features_backwards(self):
         self.next_pos = self.cur_feat_pos
         if self.next_feat is None:
@@ -183,6 +196,7 @@ class Reader:
             self.cur_feat_pos = None
         self.next_feat = lost_feat # new next (previous current)
 
+    #updates self.current_features and seeks metadata to start
     def jump_to_mt_start(self):
         self.mt_file.seek(0)
         self.cur_feat_pos = None
@@ -191,6 +205,7 @@ class Reader:
         self.pos = 0
         self.current_features.clear()
 
+    #updates self.current_features and seeks metadata to end
     def jump_to_mt_end(self):
         self.mt_file.seek(0, 2)
         self.next_pos = self.cur_feat_pos = None
@@ -200,13 +215,16 @@ class Reader:
         self.next_feat = None
         self.current_features.clear()
 
+    #gets CDS phase at self.pos
     def get_cds_phase(self):
         saved_fpos = self.mt_file.tell()
+        #use cached CDS data if possible
         if saved_fpos == self.cds_phase_cache['saved_fpos']:
             start_phase = self.cds_phase_cache['start_phase']
             start_pos = self.cds_phase_cache['start_pos']
             relative_pos = self.pos - start_pos
             r = (start_phase + relative_pos%3) | (((relative_pos // 3) & 1) << 2)
+        #find CDS and read its data, then restore file position
         else:
             prev_feat = self.unget_feature()
             while prev_feat != feature_encode['CDS'] and prev_feat is not None:
@@ -223,6 +241,7 @@ class Reader:
             self.mt_file.seek(saved_fpos)
         return r
 
+    #get byte from data file
     def get_byte(self):
         self.byte = self.file.read(1)
         if self.byte == b'':
@@ -230,6 +249,7 @@ class Reader:
         else:
             self.eof = False
 
+    #seek to arbitrary chromosome position
     def seek_pos(self):
         self.file.seek(4 + (self.pos-1)//4)
         self.n = (self.pos-1) % 4
@@ -265,10 +285,12 @@ class Reader:
 
         Reader.ch_readers[ch] = self
 
+    #read nucleotide at current position
     def read(self):
         b = int.from_bytes(self.byte, byteorder='little')
         return (b >> (2*(3-self.n))) & 3
 
+    #advance to next nucleotide, possibly updating features
     def advance(self):
         global scrw, scrh
         self.n += 1
@@ -282,6 +304,7 @@ class Reader:
         if self.pos > self.ch_size:
             self.eof = True
 
+    #jump to arbitrary chromosome position, including any features
     def jump_to(self, P):
         if P == 1:
             self.jump_to_mt_start()
@@ -318,6 +341,7 @@ class View:
             self.pos = pos
             self.title_pos = None
 
+        #move reader to this position
         def sync_reader(self):
             if self.pos == self.reader.pos:
                 pass
@@ -326,27 +350,32 @@ class View:
             else:
                 self.reader.jump_to(max(self.pos, 1))
 
+        #get previous chromosome name
         def prev_ch_name(self):
             index = chromosomes.index(self.reader.ch)
             if index == 0:
                 return None
             return chromosomes[index-1]
 
+        #get next chromosome name
         def next_ch_name(self):
             index = chromosomes.index(self.reader.ch)
             if index == len(chromosomes)-1:
                 return None
             return chromosomes[index+1]
 
+        #check if viewer is in chromosome title
         def istitle(self):
             return self.title_pos is not None
 
+        #check if viewer is in chromosome margin
         def ismargin(self):
             if self.pos < 1:
                 return True
             self.sync_reader()
             return self.reader.eof
 
+        #jump from end of chromosome to start of next
         def next_ch(self):
             self.pos = self.pos - self.reader.ch_size
             ch = self.next_ch_name()
@@ -354,6 +383,7 @@ class View:
             self.title_pos = -10
             self.sync_reader()
 
+        #jump from start of chromosome to end of previous
         def prev_ch(self):
             ch = self.prev_ch_name()
             self.reader = Reader.get_ch_reader(ch)
@@ -362,6 +392,8 @@ class View:
                 self.pos -= scrw-1
             self.title_pos = None
 
+        #advance view to next nucleotide
+        #will not affect display unless we are at the margin of a chromosome
         def advance(self):
             self.pos += 1
             if not self.ismargin():
@@ -370,6 +402,7 @@ class View:
                 else:
                     self.reader.advance()
 
+        #move view to next line
         def next_line(self):
             if self.istitle():
                 self.title_pos += 1
@@ -381,6 +414,7 @@ class View:
                 else:
                     self.pos += scrw-1
 
+        #move view to previous line
         def prev_line(self):
             if self.pos <= 1:
                 if not self.istitle():
@@ -393,18 +427,22 @@ class View:
             else:
                 self.pos -= scrw-1
 
+        #advance a number of lines
         def advance_lines(self, n):
             for l in range(0, n):
                 self.next_line()
 
+        #check check if view should jump to next chromosome, and do it if so
         def check_ch_end(self):
             if self.pos > self.reader.ch_size and (self.next_ch_name() is not None):
                 self.pos -= scrw-1
                 self.next_ch()
 
+        #check whether the view can be scrolled down
         def can_scroll_down(self):
             return (self.pos + (scrw-1)*scrh <= self.reader.ch_size) or (self.next_ch_name() is not None)
 
+        #check whether the view can be scrolled up
         def can_scroll_up(self):
             return (not self.istitle()) or (self.title_pos > -10) or (self.prev_ch_name() is not None)
 
@@ -412,6 +450,7 @@ class View:
         self.screen = stdscr
         self.top_pos = self.Pos(reader, reader.pos)
 
+    #print status line on top
     def print_status(self):
         status = "{} ({:.3f}%)".format(self.top_pos.pos, self.top_pos.pos*100/self.top_pos.reader.ch_size)
         if self.top_pos.reader.current_info:
@@ -419,6 +458,7 @@ class View:
 
         self.screen.addstr(0, 0, status)
 
+    #set the <number> characters before the last written one to a color pair
     def set_prev_pairs(self, number, pair):
         global scrw, scrh
         x = self.fillx
@@ -432,6 +472,7 @@ class View:
                     break
             self.screen.chgat(y, x, curses.color_pair(pair))
 
+    #get the appropriate nucleotide and pair for the current view position
     def get_nucleotide_and_pair(self, reader):
         global prev_nucleotide, highlight
         pair = None
@@ -470,10 +511,12 @@ class View:
             pair = PAIR_NONE + nucleotide
         if highlight['cpg'] and prev_nucleotide == 1 and nucleotide == 2:
             pair = PAIR_HIGHLIGHT
+            #also set the pair before this
             self.set_prev_pairs(1, PAIR_HIGHLIGHT)
         prev_nucleotide = nucleotide
         return (nucleotide, pair)
 
+    #print a line of the title of a chromosome
     def print_title_line(self, title, line):
           #####      ##    #######   #######  ##        ########  #######  ########  #######   #######  ##     ## ##    ##
          ##   ##   ####   ##     ## ##     ## ##    ##  ##       ##     ## ##    ## ##     ## ##     ##  ##   ##   ##  ##                ##
@@ -636,18 +679,21 @@ class View:
                 self.print_char(" ", PAIR_UNK)
                 self.fillx += 1
 
+    #write a character and pair to the current screen position
     def print_char(self, char, pair):
         try:
             self.screen.addch(self.filly, self.fillx, char, curses.color_pair(pair))
         except curses.error:
             return False
 
+    #fill a portion of the screen with the appropriate characters and pairs
     def fill(self, x, y, h):
         global scrw
         self.fillx, self.filly = x, y
         self.fillmaxy = self.filly + h
         self.current_cds_phase = None
 
+        #create a copy of the current view top position
         pos = copy.copy(self.top_pos)
         pos.advance_lines(y)
 
@@ -669,6 +715,7 @@ class View:
             self.filly += 1
         self.print_status()
 
+    #try to scroll view down a number of lines
     def scroll_down(self, n):
         global scrw, scrh
         while n > 0 and self.top_pos.can_scroll_down():
@@ -679,6 +726,7 @@ class View:
         if self.top_pos.reader.current_info and self.top_pos.reader.prev_info_pos and self.top_pos.reader.prev_info_pos < self.top_pos.pos:
             self.top_pos.reader.current_info = ""
 
+    #try to scroll view up a number of lines
     def scroll_up(self, n):
         global scrw, scrh
         while n > 0 and self.top_pos.can_scroll_up():
@@ -689,6 +737,7 @@ class View:
         if self.top_pos.reader.current_info and self.top_pos.reader.prev_info_pos and self.top_pos.reader.prev_info_pos > self.top_pos.pos + (scrw-1)*scrh:
             self.top_pos.reader.current_info = ""
 
+    #resize view to new size
     def resize(self, W, H):
         global scrw, scrh
         self.screen.clear()
