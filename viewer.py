@@ -84,13 +84,15 @@ scrh = 25
 
 highlight = {
     'cpg' : False,
-    'tata' : False
+    'tata' : False,
+    'caat' : False
 }
 
 #consensus sequence, max differences
 highlighter = {
     'cpg' : ("CG", 0),
-    'tata' : ("TATAWAWR", 1)
+    'tata' : ("TATAWAWR", 1),
+    'caat' : ("YRRCCAATCA", 1)
 }
 
 ch_initial = "1"
