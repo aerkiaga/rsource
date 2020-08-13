@@ -83,7 +83,14 @@ scrw = 80
 scrh = 25
 
 highlight = {
-    'cpg' : False
+    'cpg' : False,
+    'tata' : False
+}
+
+#consensus sequence, max differences
+highlighter = {
+    'cpg' : ("CG", 0),
+    'tata' : ("TATAWAWR", 1)
 }
 
 ch_initial = "1"
@@ -479,14 +486,43 @@ class View:
                     break
             self.screen.chgat(y, x, curses.color_pair(pair))
 
+    #match nucleotide with consensus sequence symbol
+    def match_consensus(self, nucleotide, consensus):
+        nucleotide = nucleotide_decoding[nucleotide]
+        return (
+            nucleotide == consensus
+            or consensus == 'N'
+            or consensus == 'W' and nucleotide in ['A', 'T']
+            or consensus == 'S' and nucleotide in ['C', 'G']
+            or consensus == 'R' and nucleotide in ['A', 'G']
+            or consensus == 'Y' and nucleotide in ['C', 'T']
+            or consensus == 'M' and nucleotide in ['A', 'C']
+            or consensus == 'K' and nucleotide in ['G', 'T']
+            or consensus == 'B' and nucleotide in ['C', 'G', 'T']
+            or consensus == 'D' and nucleotide in ['A', 'G', 'T']
+            or consensus == 'H' and nucleotide in ['A', 'C', 'T']
+            or consensus == 'V' and nucleotide in ['A', 'C', 'G']
+        )
+
     #possibly apply highlight to preceding nucleotides, return pair for current one
     def apply_highlight(self, reader):
-        global highlight
+        global highlight, highlighter
         pair = None
-        if highlight['cpg'] and reader.last_nucleotides[-2] == 1 and reader.last_nucleotides[-1] == 2:
-            pair = PAIR_HIGHLIGHT
-            #also set the pair before this
-            self.set_prev_pairs(1, PAIR_HIGHLIGHT)
+        for name, enabled in highlight.items():
+            if enabled:
+                position = -1
+                differences = 0
+                while -position <= len(highlighter[name][0]):
+                    if not self.match_consensus(reader.last_nucleotides[position], highlighter[name][0][position]):
+                        differences += 1
+                        if differences > highlighter[name][1]:
+                            position = None
+                            break
+                    position -= 1
+                if position is not None:
+                    pair = PAIR_HIGHLIGHT
+                    #also set the pair before this
+                    self.set_prev_pairs(len(highlighter[name][0]) - 1, PAIR_HIGHLIGHT)
         return pair
 
     #get the appropriate nucleotide and pair for the current view position
