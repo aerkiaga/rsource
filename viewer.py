@@ -86,6 +86,7 @@ highlight = {
     'cpg' : False,
     'tata' : False,
     'caat' : False,
+    'gc' : False,
     'inr' : False,
     'kozak' : False
 }
@@ -95,6 +96,7 @@ highlighter = {
     'cpg' : ("CG", 0),
     'tata' : ("TATAWAWR", 1),
     'caat' : ("YRRCCAATCA", 1),
+    'gc' : ("GGGCGG", 1),
     'inr' : ("BBCABWY", 0),
     'kozak' : ("YRYVATGG", 1)
 }
